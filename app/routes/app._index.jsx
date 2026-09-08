@@ -326,7 +326,35 @@ export default function Dashboard() {
             gap: "16px",
           }}
         >
-          {/* Start SEO Optimizer */}
+          {/* 1-Click Bulk Optimizer */}
+          <div
+            onClick={() => { window.location.href = "/app/bulk-optimizer"; }}
+            style={{
+              background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+              borderRadius: "12px",
+              padding: "24px",
+              cursor: "pointer",
+              color: "#ffffff",
+              boxShadow: "0 4px 16px rgba(15, 23, 42, 0.4)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ position: "absolute", top: "12px", right: "12px", background: "#10b981", color: "#ffffff", fontSize: "10px", fontWeight: "800", padding: "2px 8px", borderRadius: "10px" }}>
+              NEW
+            </div>
+            <div style={{ fontSize: "28px", marginBottom: "10px" }}>🚀</div>
+            <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>1-Click Bulk Optimizer</div>
+            <div style={{ fontSize: "13px", opacity: 0.85, lineHeight: "1.4" }}>
+              Batch optimize 10+ products at once with live progress and side-by-side review.
+            </div>
+            <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: "#34d399" }}>
+              Launch Bulk Tool →
+            </div>
+          </div>
+
+          {/* Start Single SEO Optimizer */}
           <div
             onClick={() => { window.location.href = "/app/seo-optimizer"; }}
             style={{
@@ -339,12 +367,12 @@ export default function Dashboard() {
             }}
           >
             <div style={{ fontSize: "28px", marginBottom: "10px" }}>⚡</div>
-            <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>SEO Optimizer</div>
+            <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>Single Optimizer</div>
             <div style={{ fontSize: "13px", opacity: 0.85 }}>
-              Generate AI-powered SEO titles & meta descriptions for your products.
+              Fine-tune titles & descriptions one-by-one with Google SERP preview.
             </div>
             <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", opacity: 0.9 }}>
-              Open Optimizer →
+              Open Single Tool →
             </div>
           </div>
 

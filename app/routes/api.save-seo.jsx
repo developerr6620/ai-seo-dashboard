@@ -5,6 +5,74 @@ export const action = async ({ request }) => {
   
   try {
     const data = await request.json();
+
+    // Check if this is a bulk request
+    if (Array.isArray(data.items)) {
+      const items = data.items;
+      let successCount = 0;
+      const errors = [];
+
+      for (const item of items) {
+        if (!item.productId || !item.seoTitle) continue;
+
+        try {
+          const response = await admin.graphql(
+            `#graphql
+            mutation updateProductSeo($input: ProductInput!) {
+              productUpdate(input: $input) {
+                product {
+                  id
+                  title
+                  seo {
+                    title
+                    description
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+            {
+              variables: {
+                input: {
+                  id: item.productId,
+                  seo: {
+                    title: item.seoTitle,
+                    description: item.seoDescription || "",
+                  },
+                },
+              },
+            }
+          );
+
+          const resJson = await response.json();
+          const userErrors = resJson?.data?.productUpdate?.userErrors || [];
+          if (userErrors.length > 0) {
+            errors.push({
+              productId: item.productId,
+              error: userErrors.map((e) => e.message).join(", "),
+            });
+          } else {
+            successCount++;
+          }
+        } catch (e) {
+          errors.push({
+            productId: item.productId,
+            error: e.message || "Failed to update",
+          });
+        }
+      }
+
+      return Response.json({
+        success: true,
+        updatedCount: successCount,
+        errors,
+      });
+    }
+
+    // Single product update
     const { productId, seoTitle, seoDescription } = data;
 
     if (!productId || !seoTitle) {
