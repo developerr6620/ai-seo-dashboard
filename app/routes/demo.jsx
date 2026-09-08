@@ -1,5 +1,13 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router";
+import {
+  DESC_MAX,
+  TITLE_MAX,
+  generateSeoCopy,
+  generateSeoVariations,
+  isDescOk,
+  isTitleOk,
+} from "../lib/seoCopy";
 
 // Sample initial products for the interactive demo sandbox
 const INITIAL_DEMO_PRODUCTS = [
@@ -45,45 +53,10 @@ const INITIAL_DEMO_PRODUCTS = [
     handle: "organic-egyptian-cotton-duvet-cover",
     description: "GOTS-certified 800 thread count long-staple organic cotton with breathable sateen weave and hidden coconut button closures.",
     status: "ACTIVE",
-    seoTitle: "Organic Egyptian Cotton Duvet Cover | Luxury Bedding", // Optimal (53 chars)
-    seoDescription: "Experience 5-star hotel luxury with our GOTS-certified 800 thread count Egyptian organic cotton duvet cover. Enjoy free shipping and 100-night sleep guarantee!", // Optimal (160 chars)
+    seoTitle: "Organic Egyptian Cotton Duvet Cover",
+    seoDescription: "GOTS-certified 800 thread count organic cotton with a breathable sateen weave. Shop this duvet cover today.",
   },
 ];
-
-// Strict clamp functions for SEO criteria
-const clampTitle = (raw) => {
-  let text = raw.trim();
-  if (text.length > 60) text = text.slice(0, 60).trim();
-  const suffixes = [" | Official Store", " | Free Shipping", " - Buy Now", " - Best Deal", " - Shop Now", " Online"];
-  for (const s of suffixes) {
-    if (text.length < 50 && (text + s).length <= 60) text = text + s;
-  }
-  while (text.length < 50 && text.length + 11 <= 60) text += " - Shop Now";
-  if (text.length > 60) text = text.slice(0, 60).trim();
-  return text;
-};
-
-const clampDesc = (raw) => {
-  let text = raw.trim();
-  if (text.length > 160) text = text.slice(0, 160).trim();
-  const pads = [
-    " Order online today for fast express delivery and 100% satisfaction.",
-    " Explore great deals, verified reviews, and fast shipping.",
-    " Premium quality with hassle-free returns and great support.",
-    " Limited stock available - buy online now for the best price!",
-    " Shop with confidence and enjoy quick delivery.",
-  ];
-  for (const p of pads) {
-    if (text.length < 150 && (text + p).length <= 160) text = text + p;
-  }
-  while (text.length < 150) {
-    const pad = " Shop now!";
-    if ((text + pad).length <= 160) text += pad;
-    else break;
-  }
-  if (text.length > 160) text = text.slice(0, 160).trim();
-  return text;
-};
 
 export default function DemoPage() {
   const [products, setProducts] = useState(INITIAL_DEMO_PRODUCTS);
@@ -123,8 +96,8 @@ export default function DemoPage() {
     const total = products.length;
     const withTitle = products.filter((p) => p.seoTitle && p.seoTitle.trim().length > 0).length;
     const withDesc = products.filter((p) => p.seoDescription && p.seoDescription.trim().length > 0).length;
-    const optimalTitle = products.filter((p) => (p.seoTitle?.length || 0) >= 50 && (p.seoTitle?.length || 0) <= 60).length;
-    const optimalDesc = products.filter((p) => (p.seoDescription?.length || 0) >= 150 && (p.seoDescription?.length || 0) <= 160).length;
+    const optimalTitle = products.filter((p) => isTitleOk(p.seoTitle)).length;
+    const optimalDesc = products.filter((p) => isDescOk(p.seoDescription)).length;
     const score = total > 0 ? Math.round(((withTitle + withDesc) / (total * 2)) * 100) : 0;
     return {
       total,
@@ -154,49 +127,13 @@ export default function DemoPage() {
     setTimeout(() => {
       const p = selectedProduct;
       const kw = keywords.trim() ? keywords.split(",").map((k) => k.trim()).filter(Boolean) : [];
-      const kwPrimary = kw[0] || "Best Quality";
-      const kwSecondary = kw[1] || "Top Rated";
 
-      let vars = [];
-      if (tone === "Luxury") {
-        vars = [
-          {
-            title: clampTitle(`The Luxury ${p.title} - ${kwPrimary} Collection`),
-            desc: clampDesc(`Indulge in artisanal luxury with our ${p.title}. Crafted for discerning connoisseurs seeking refined ${kwPrimary} and uncompromising elegance.`),
-          },
-          {
-            title: clampTitle(`Exclusive ${p.title} | Premium ${kwSecondary}`),
-            desc: clampDesc(`Discover the bespoke craftsmanship of the ${p.title}. Designed with prestige materials, timeless aesthetics, and superior performance.`),
-          },
-        ];
-      } else if (tone === "Urgent / Sales") {
-        vars = [
-          {
-            title: clampTitle(`Flash Sale: ${p.title} - Get 30% Off Today`),
-            desc: clampDesc(`Huge limited-time sale on the ${p.title}! Save big with free express delivery and instant checkout. Order before our stock sells out today.`),
-          },
-          {
-            title: clampTitle(`Buy ${p.title} Online - Best Price Guaranteed`),
-            desc: clampDesc(`Exclusive discount deal on ${p.title} (${kwPrimary}). Don't miss out on special markdown pricing, top customer reviews, and fast shipping!`),
-          },
-        ];
-      } else {
-        // High-Converting Default
-        vars = [
-          {
-            title: clampTitle(`Shop ${p.title} | ${kwPrimary} - Official Store`),
-            desc: clampDesc(`Elevate your daily routine with the ${p.title}. Engineered for top-tier ${kwPrimary} and built to last with guaranteed fast shipping.`),
-          },
-          {
-            title: clampTitle(`${p.title} Online - Top Rated ${kwSecondary}`),
-            desc: clampDesc(`Discover top-rated ${p.title}. Premium grade craftsmanship meets versatile daily performance. Browse customer reviews and order with confidence!`),
-          },
-          {
-            title: clampTitle(`Best ${p.title} - Free Shipping & Returns`),
-            desc: clampDesc(`Upgrade to ${p.title} today. Experience verified customer satisfaction, hassle-free returns, and fast checkout on all online orders.`),
-          },
-        ];
-      }
+      const vars = generateSeoVariations({
+        productTitle: p.title,
+        productDescription: p.description,
+        keywords: kw,
+        tone,
+      }).map((item) => ({ title: item.title, desc: item.description }));
       setAiVariations(vars);
       setIsGenerating(false);
       setToastMessage("✨ AI SEO variations generated successfully!");
@@ -256,21 +193,14 @@ export default function DemoPage() {
       const p = targets[i];
       await new Promise((r) => setTimeout(r, 180)); // Visual progress tick
 
-      let t = "";
-      let d = "";
+      const copy = generateSeoCopy({
+        productTitle: p.title,
+        productDescription: p.description,
+        keywords: bulkKeywords,
+        tone: bulkTone,
+      });
 
-      if (bulkTone === "Luxury") {
-        t = clampTitle(`The Luxury ${p.title} - Exclusive Edition`);
-        d = clampDesc(`Indulge in artisanal luxury with our ${p.title}. Crafted for discerning shoppers seeking bespoke elegance, verified quality, and timeless style.`);
-      } else if (bulkTone === "Urgent / Sales") {
-        t = clampTitle(`Flash Sale: ${p.title} - 30% Off Today`);
-        d = clampDesc(`Limited time flash sale on the ${p.title}! Enjoy free express delivery, premium customer support, and instant savings before stock runs out today.`);
-      } else {
-        t = clampTitle(`Buy ${p.title} Online | Official Store`);
-        d = clampDesc(`Upgrade your collection with our authentic ${p.title}. Built with premium materials, verified customer reviews, and fast free shipping on all orders.`);
-      }
-
-      newProposals[p.id] = { seoTitle: t, seoDescription: d };
+      newProposals[p.id] = { seoTitle: copy.title, seoDescription: copy.description };
 
       const curr = i + 1;
       setBulkProgress({
@@ -317,8 +247,8 @@ export default function DemoPage() {
 
   const titleLength = seoTitle.length;
   const descLength = seoDescription.length;
-  const isTitleOptimal = titleLength >= 50 && titleLength <= 60;
-  const isDescOptimal = descLength >= 150 && descLength <= 160;
+  const isTitleOptimal = isTitleOk(seoTitle);
+  const isDescOptimal = isDescOk(seoDescription);
 
   const scoreColor = stats.score >= 80 ? "#10b981" : stats.score >= 50 ? "#f59e0b" : "#ef4444";
 
@@ -894,7 +824,7 @@ export default function DemoPage() {
                           {v.desc}
                         </div>
                         <div style={{ fontSize: "11px", color: "#108043", marginTop: "6px", fontWeight: "600" }}>
-                          Title: {v.title.length}/60 chars &bull; Desc: {v.desc.length}/160 chars (Optimal)
+                          Title: {v.title.length}/{TITLE_MAX} chars &bull; Desc: {v.desc.length}/{DESC_MAX} chars (Within limit)
                         </div>
                       </div>
                     ))}
@@ -1018,7 +948,7 @@ export default function DemoPage() {
                         color: isTitleOptimal ? "#108043" : titleLength > 60 ? "#d9381e" : "#b7791f",
                       }}
                     >
-                      {titleLength}/60 chars {isTitleOptimal ? "✓ Optimal (50-60)" : titleLength > 60 ? "⚠️ Truncated" : "(Too Short)"}
+                      {titleLength}/{TITLE_MAX} chars {isTitleOptimal ? `✓ Within limit (max ${TITLE_MAX})` : titleLength > TITLE_MAX ? "⚠️ Over limit" : "(Add a title)"}
                     </span>
                   </div>
                   <input
@@ -1047,7 +977,7 @@ export default function DemoPage() {
                         color: isDescOptimal ? "#108043" : descLength > 160 ? "#d9381e" : "#b7791f",
                       }}
                     >
-                      {descLength}/160 chars {isDescOptimal ? "✓ Optimal (150-160)" : descLength > 160 ? "⚠️ Truncated" : "(Too Short)"}
+                      {descLength}/{DESC_MAX} chars {isDescOptimal ? `✓ Within limit (max ${DESC_MAX})` : descLength > DESC_MAX ? "⚠️ Over limit" : "(Add a description)"}
                     </span>
                   </div>
                   <textarea
@@ -1113,7 +1043,7 @@ export default function DemoPage() {
                     1-Click Catalog Bulk Generator
                   </h2>
                   <div style={{ fontSize: "13px", opacity: 0.85 }}>
-                    Optimize all products at once. AI strictly calculates optimal 50–60 char titles and 150–160 char descriptions.
+                    Optimize all products at once. AI writes complete titles under {TITLE_MAX} characters and full-sentence descriptions under {DESC_MAX} characters.
                   </div>
                 </div>
 
@@ -1269,8 +1199,8 @@ export default function DemoPage() {
 
                       const titleLen = titleToDisplay.length;
                       const descLen = descToDisplay.length;
-                      const isTitleGood = titleLen >= 50 && titleLen <= 60;
-                      const isDescGood = descLen >= 150 && descLen <= 160;
+                      const isTitleGood = isTitleOk(titleToDisplay);
+                      const isDescGood = isDescOk(descToDisplay);
 
                       return (
                         <tr
@@ -1326,7 +1256,7 @@ export default function DemoPage() {
                                   }}
                                 />
                                 <div style={{ fontSize: "11px", marginTop: "4px", color: isTitleGood ? "#108043" : "#b7791f", fontWeight: "600" }}>
-                                  {titleLen}/60 chars {isTitleGood ? "✓ Optimal" : "(50-60 target)"}
+                                  {titleLen}/{TITLE_MAX} chars {isTitleGood ? "✓ Within limit" : `(max ${TITLE_MAX})`}
                                 </div>
                               </div>
                             ) : (
@@ -1361,7 +1291,7 @@ export default function DemoPage() {
                                   }}
                                 />
                                 <div style={{ fontSize: "11px", marginTop: "4px", color: isDescGood ? "#108043" : "#b7791f", fontWeight: "600" }}>
-                                  {descLen}/160 chars {isDescGood ? "✓ Optimal" : "(150-160 target)"}
+                                  {descLen}/{DESC_MAX} chars {isDescGood ? "✓ Within limit" : `(max ${DESC_MAX})`}
                                 </div>
                               </div>
                             ) : (

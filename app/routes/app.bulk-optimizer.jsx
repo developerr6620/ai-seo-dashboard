@@ -2,6 +2,13 @@ import { useState, useMemo } from "react";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import {
+  DESC_MAX,
+  TITLE_MAX,
+  generateSeoCopy,
+  isDescOk,
+  isTitleOk,
+} from "../lib/seoCopy";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -53,41 +60,6 @@ export const loader = async ({ request }) => {
   }
 };
 
-// Strict clamp functions
-const clampTitle = (raw) => {
-  let text = raw.trim();
-  if (text.length > 60) text = text.slice(0, 60).trim();
-  const suffixes = [" | Official Store", " | Free Shipping", " - Buy Now", " - Best Deal", " - Shop Now", " Online"];
-  for (const s of suffixes) {
-    if (text.length < 50 && (text + s).length <= 60) text = text + s;
-  }
-  while (text.length < 50 && text.length + 11 <= 60) text += " - Shop Now";
-  if (text.length > 60) text = text.slice(0, 60).trim();
-  return text;
-};
-
-const clampDesc = (raw) => {
-  let text = raw.trim();
-  if (text.length > 160) text = text.slice(0, 160).trim();
-  const pads = [
-    " Order online today for fast express delivery and 100% satisfaction.",
-    " Explore great deals, verified reviews, and fast shipping.",
-    " Premium quality with hassle-free returns and great support.",
-    " Limited stock available - buy online now for the best price!",
-    " Shop with confidence and enjoy quick delivery.",
-  ];
-  for (const p of pads) {
-    if (text.length < 150 && (text + p).length <= 160) text = text + p;
-  }
-  while (text.length < 150) {
-    const pad = " Shop now!";
-    if ((text + pad).length <= 160) text += pad;
-    else break;
-  }
-  if (text.length > 160) text = text.slice(0, 160).trim();
-  return text;
-};
-
 export default function BulkOptimizer() {
   const loaderData = useLoaderData();
   const [products, setProducts] = useState(loaderData?.products || []);
@@ -117,8 +89,8 @@ export default function BulkOptimizer() {
       // Status category filter
       const hasTitle = Boolean(p.seoTitle?.trim());
       const hasDesc = Boolean(p.seoDescription?.trim());
-      const isTitleOptimal = (p.seoTitle?.length || 0) >= 50 && (p.seoTitle?.length || 0) <= 60;
-      const isDescOptimal = (p.seoDescription?.length || 0) >= 150 && (p.seoDescription?.length || 0) <= 160;
+      const isTitleOptimal = isTitleOk(p.seoTitle);
+      const isDescOptimal = isDescOk(p.seoDescription);
 
       if (filter === "missing-title") return !hasTitle;
       if (filter === "missing-desc") return !hasDesc;
@@ -134,7 +106,7 @@ export default function BulkOptimizer() {
     const missingTitle = products.filter((p) => !p.seoTitle?.trim()).length;
     const missingDesc = products.filter((p) => !p.seoDescription?.trim()).length;
     const suboptimal = products.filter(
-      (p) => (p.seoTitle?.length || 0) < 50 || (p.seoTitle?.length || 0) > 60 || (p.seoDescription?.length || 0) < 150 || (p.seoDescription?.length || 0) > 160
+      (p) => !isTitleOk(p.seoTitle) || !isDescOk(p.seoDescription)
     ).length;
     const optimized = total - suboptimal;
     return { total, missingTitle, missingDesc, suboptimal, optimized };
@@ -165,8 +137,6 @@ export default function BulkOptimizer() {
     setGenerationProgress({ current: 0, total: targets.length, percentage: 0 });
 
     const kwList = globalKeywords.trim() ? globalKeywords.split(",").map((k) => k.trim()).filter(Boolean) : [];
-    const kw1 = kwList[0] || "Best Quality";
-    const kw2 = kwList[1] || "Top Rated";
 
     const newProposals = { ...proposedUpdates };
 
@@ -176,24 +146,16 @@ export default function BulkOptimizer() {
       // Simulate AI generation delay for realistic progress feel
       await new Promise((resolve) => setTimeout(resolve, 80));
 
-      let genTitle = "";
-      let genDesc = "";
-
-      if (tone === "Luxury") {
-        genTitle = clampTitle(`The Luxury ${p.title} - ${kw1} Collection`);
-        genDesc = clampDesc(`Indulge in artisanal luxury with our ${p.title}. Crafted for discerning connoisseurs seeking refined ${kw1} and uncompromising elegance.`);
-      } else if (tone === "Urgent / Sales") {
-        genTitle = clampTitle(`Flash Sale: ${p.title} - 30% Off Today Only`);
-        genDesc = clampDesc(`Huge limited-time markdown on ${p.title}! Save big with free express delivery and instant checkout. Order online before current inventory sells out today.`);
-      } else {
-        // High-Converting Default
-        genTitle = clampTitle(`Shop ${p.title} | ${kw1} - Official Store`);
-        genDesc = clampDesc(`Upgrade your lifestyle with our ${p.title}. Engineered for superior ${kw2} and built to last. Enjoy verified customer satisfaction and fast shipping!`);
-      }
+      const copy = generateSeoCopy({
+        productTitle: p.title,
+        productDescription: p.description,
+        keywords: kwList,
+        tone,
+      });
 
       newProposals[p.id] = {
-        seoTitle: genTitle,
-        seoDescription: genDesc,
+        seoTitle: copy.title,
+        seoDescription: copy.description,
         isReviewed: true,
       };
 
@@ -535,8 +497,8 @@ export default function BulkOptimizer() {
 
                   const titleLen = titleToDisplay.length;
                   const descLen = descToDisplay.length;
-                  const isTitleGood = titleLen >= 50 && titleLen <= 60;
-                  const isDescGood = descLen >= 150 && descLen <= 160;
+                  const isTitleGood = isTitleOk(titleToDisplay);
+                  const isDescGood = isDescOk(descToDisplay);
 
                   return (
                     <tr
@@ -596,7 +558,7 @@ export default function BulkOptimizer() {
                               }}
                             />
                             <div style={{ fontSize: "11px", marginTop: "4px", color: isTitleGood ? "#108043" : "#b7791f", fontWeight: "600" }}>
-                              {titleLen}/60 chars {isTitleGood ? "✓ Optimal" : "(Aim for 50-60)"}
+                              {titleLen}/{TITLE_MAX} chars {isTitleGood ? "✓ Within limit" : `(max ${TITLE_MAX})`}
                             </div>
                           </div>
                         ) : (
@@ -632,7 +594,7 @@ export default function BulkOptimizer() {
                               }}
                             />
                             <div style={{ fontSize: "11px", marginTop: "4px", color: isDescGood ? "#108043" : "#b7791f", fontWeight: "600" }}>
-                              {descLen}/160 chars {isDescGood ? "✓ Optimal" : "(Aim for 150-160)"}
+                              {descLen}/{DESC_MAX} chars {isDescGood ? "✓ Within limit" : `(max ${DESC_MAX})`}
                             </div>
                           </div>
                         ) : (

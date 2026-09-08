@@ -3,6 +3,13 @@ import { useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import {
+  DESC_MAX,
+  TITLE_MAX,
+  generateSeoVariations,
+  isDescOk,
+  isTitleOk,
+} from "../lib/seoCopy";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -39,7 +46,7 @@ export const loader = async ({ request }) => {
       description: String(p.description || ""),
       status: String(p.status || "ACTIVE"),
       seoTitle: String(p.seo?.title || p.title || ""),
-      seoDescription: String(p.seo?.description || p.description?.slice(0, 150) || ""),
+      seoDescription: String(p.seo?.description || ""),
     }));
 
     return { products };
@@ -47,42 +54,6 @@ export const loader = async ({ request }) => {
     console.error("Error loading products:", error);
     return { products: [] };
   }
-};
-
-// Strict clamp: Title must be 50-60 chars
-const clampTitle = (raw) => {
-  let text = raw.trim();
-  if (text.length > 60) text = text.slice(0, 60).trim();
-  const suffixes = [" | Official Store", " | Free Shipping", " - Buy Now", " - Best Deal", " - Shop Now", " Online"];
-  for (const s of suffixes) {
-    if (text.length < 50 && (text + s).length <= 60) text = text + s;
-  }
-  while (text.length < 50 && text.length + 11 <= 60) text += " - Shop Now";
-  if (text.length > 60) text = text.slice(0, 60).trim();
-  return text;
-};
-
-// Strict clamp: Meta Description must be 150-160 chars
-const clampDesc = (raw) => {
-  let text = raw.trim();
-  if (text.length > 160) text = text.slice(0, 160).trim();
-  const pads = [
-    " Order online today for fast express delivery and 100% satisfaction.",
-    " Explore great deals, verified reviews, and fast shipping.",
-    " Premium quality with hassle-free returns and great support.",
-    " Limited stock available - buy online now for the best price!",
-    " Shop with confidence and enjoy quick delivery.",
-  ];
-  for (const p of pads) {
-    if (text.length < 150 && (text + p).length <= 160) text = text + p;
-  }
-  while (text.length < 150) {
-    const pad = " Shop now!";
-    if ((text + pad).length <= 160) text += pad;
-    else break;
-  }
-  if (text.length > 160) text = text.slice(0, 160).trim();
-  return text;
 };
 
 export default function SeoOptimizer() {
@@ -131,13 +102,13 @@ export default function SeoOptimizer() {
   const seoAnalysis = useMemo(() => {
     const titleLen = (seoTitle || "").length;
     const descLen = (seoDescription || "").length;
-    const titleOk = titleLen >= 50 && titleLen <= 60;
-    const descOk = descLen >= 150 && descLen <= 160;
+    const titleOk = isTitleOk(seoTitle);
+    const descOk = isDescOk(seoDescription);
     let score = 0;
     if (titleOk) score += 50;
-    else if (titleLen >= 30 && titleLen <= 65) score += 25;
+    else if (titleLen > 0 && titleLen <= TITLE_MAX + 10) score += 25;
     if (descOk) score += 50;
-    else if (descLen >= 120 && descLen <= 165) score += 25;
+    else if (descLen > 0 && descLen <= DESC_MAX + 20) score += 25;
     return { score, titleOk, descOk, titleLen, descLen };
   }, [seoTitle, seoDescription]);
 
@@ -145,32 +116,13 @@ export default function SeoOptimizer() {
     if (!selectedProduct) return;
     setIsGenerating(true);
     setTimeout(() => {
-      const pTitle = selectedProduct.title;
-      const kw = keywords ? keywords.split(",")[0].trim() : "Best Quality";
-
-      let rawVariations = [];
-      if (tone === "High-Converting") {
-        rawVariations = [
-          { rawT: `Buy ${pTitle} Online - Premium ${kw} | Free Shipping`, rawD: `Shop ${pTitle} today! Top rated ${kw.toLowerCase()} engineered for premium performance. Enjoy fast express delivery and 100% satisfaction guarantee.` },
-          { rawT: `${pTitle} (${kw}) - Best Deals & Fast Delivery`, rawD: `Upgrade your collection with ${pTitle}. High quality ${kw.toLowerCase()} built to last. Limited stock available - order yours online now for best price!` },
-          { rawT: `Official ${pTitle} - Top ${kw} Selection`, rawD: `Looking for top quality ${pTitle}? Discover premium craftsmanship, verified customer reviews, and exclusive deals on our store.` },
-        ];
-      } else if (tone === "Luxury & Authoritative") {
-        rawVariations = [
-          { rawT: `The Essential ${pTitle} | Exclusive ${kw}`, rawD: `Indulge in refined elegance with ${pTitle}. Masterfully crafted ${kw.toLowerCase()} for individuals seeking luxury, style, and durability.` },
-          { rawT: `${pTitle} Signature Edition - ${kw}`, rawD: `Discover timeless quality with ${pTitle}. Designed with premium materials and precision engineering. Explore our store collection today.` },
-        ];
-      } else {
-        rawVariations = [
-          { rawT: `${pTitle} - Rated #1 ${kw} | Shop Now`, rawD: `Get the original ${pTitle}! Perfect for ${targetAudience.toLowerCase()}. High performance, reliable quality, backed by fast hassle-free returns.` },
-          { rawT: `Best ${pTitle} Deals - ${kw} Guaranteed`, rawD: `See why customers recommend ${pTitle}. Great value, premium ${kw.toLowerCase()}, and 24/7 dedicated support. Order yours today!` },
-        ];
-      }
-
-      const strictVariations = rawVariations.map((item) => ({
-        title: clampTitle(item.rawT),
-        desc: clampDesc(item.rawD),
-      }));
+      const strictVariations = generateSeoVariations({
+        productTitle: selectedProduct.title,
+        productDescription: selectedProduct.description,
+        keywords,
+        tone,
+        audience: targetAudience,
+      }).map((item) => ({ title: item.title, desc: item.description }));
 
       setAiVariations(strictVariations);
       setSeoTitle(strictVariations[0].title);
@@ -210,7 +162,7 @@ export default function SeoOptimizer() {
     <s-page heading="⚡ AI SEO Optimizer">
       <s-section heading="Product Catalog SEO Optimizer">
         <s-paragraph>
-          Search your store catalog, generate strict 50–60 char titles & 150–160 char meta descriptions, and publish directly to Shopify.
+          Search your store catalog, generate titles under {TITLE_MAX} characters and complete meta descriptions under {DESC_MAX} characters, then publish directly to Shopify.
         </s-paragraph>
 
         {products.length === 0 ? (
@@ -279,7 +231,7 @@ export default function SeoOptimizer() {
                     </div>
                   </s-stack>
                   <s-text-field label="Focus Keywords" value={keywords} onChange={(e) => setKeywords(e.currentTarget.value)} details="Example: eco-friendly, premium quality, top rated"></s-text-field>
-                  <s-button onClick={handleGenerateAI} {...(isGenerating ? { loading: true } : {})}>✨ Generate Strict (50-60 Title / 150-160 Meta) AI Content</s-button>
+                  <s-button onClick={handleGenerateAI} {...(isGenerating ? { loading: true } : {})}>✨ Generate SEO (title ≤ {TITLE_MAX} / description ≤ {DESC_MAX})</s-button>
                 </s-stack>
               </s-box>
             )}
@@ -327,15 +279,15 @@ export default function SeoOptimizer() {
 
                 <s-stack direction="block" gap="base">
                   <div>
-                    <s-text-field label={`SEO Title (${seoAnalysis.titleLen} / 60 chars — Strict: 50–60)`} value={seoTitle} onChange={(e) => setSeoTitle(e.currentTarget.value)}></s-text-field>
+                    <s-text-field label={`SEO Title (${seoAnalysis.titleLen} / ${TITLE_MAX} chars max)`} value={seoTitle} onChange={(e) => setSeoTitle(e.currentTarget.value)}></s-text-field>
                     <div style={{ fontSize: "12px", marginTop: "2px", fontWeight: "600", color: seoAnalysis.titleOk ? "#108043" : "#d9381e" }}>
-                      {seoAnalysis.titleOk ? `✓ PERFECT: ${seoAnalysis.titleLen} chars (50-60 range)` : `⚠️ NEEDS FIX: ${seoAnalysis.titleLen} chars (must be 50-60)`}
+                      {seoAnalysis.titleOk ? `✓ Within limit: ${seoAnalysis.titleLen} chars (max ${TITLE_MAX})` : `⚠️ Over limit: ${seoAnalysis.titleLen} chars (must be ${TITLE_MAX} or less)`}
                     </div>
                   </div>
                   <div>
-                    <s-text-field label={`Meta Description (${seoAnalysis.descLen} / 160 chars — Strict: 150–160)`} value={seoDescription} onChange={(e) => setSeoDescription(e.currentTarget.value)}></s-text-field>
+                    <s-text-field label={`Meta Description (${seoAnalysis.descLen} / ${DESC_MAX} chars max)`} value={seoDescription} onChange={(e) => setSeoDescription(e.currentTarget.value)}></s-text-field>
                     <div style={{ fontSize: "12px", marginTop: "2px", fontWeight: "600", color: seoAnalysis.descOk ? "#108043" : "#d9381e" }}>
-                      {seoAnalysis.descOk ? `✓ PERFECT: ${seoAnalysis.descLen} chars (150-160 range)` : `⚠️ NEEDS FIX: ${seoAnalysis.descLen} chars (must be 150-160)`}
+                      {seoAnalysis.descOk ? `✓ Within limit: ${seoAnalysis.descLen} chars (max ${DESC_MAX})` : `⚠️ Over limit: ${seoAnalysis.descLen} chars (must be ${DESC_MAX} or less)`}
                     </div>
                   </div>
                   <s-button variant="primary" onClick={handleSaveSeo} {...(isSaving ? { loading: true } : {})}>

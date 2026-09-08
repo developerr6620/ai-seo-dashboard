@@ -1,6 +1,7 @@
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { isDescOk, isTitleOk } from "../lib/seoCopy";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -40,14 +41,8 @@ export const loader = async ({ request }) => {
     const totalProducts = allProducts.length;
     const withSeoTitle = allProducts.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
     const withSeoDesc = allProducts.filter((p) => p.seo?.description && p.seo.description.trim().length > 0).length;
-    const withOptimalTitle = allProducts.filter((p) => {
-      const len = p.seo?.title?.length || 0;
-      return len >= 50 && len <= 60;
-    }).length;
-    const withOptimalDesc = allProducts.filter((p) => {
-      const len = p.seo?.description?.length || 0;
-      return len >= 150 && len <= 160;
-    }).length;
+    const withOptimalTitle = allProducts.filter((p) => isTitleOk(p.seo?.title)).length;
+    const withOptimalDesc = allProducts.filter((p) => isDescOk(p.seo?.description)).length;
     const missingTitle = totalProducts - withSeoTitle;
     const missingDesc = totalProducts - withSeoDesc;
 
@@ -226,7 +221,7 @@ export default function Dashboard() {
             <div style={{ fontSize: "32px", fontWeight: "800", color: "#008060" }}>{stats.withOptimalTitle}</div>
             <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Perfect SEO Length</div>
             <div style={{ fontSize: "11px", color: "#6d7175", marginTop: "4px" }}>
-              (50-60 char title)
+              (title ≤ 50 chars)
             </div>
           </div>
         </div>
@@ -294,7 +289,7 @@ export default function Dashboard() {
           {/* Optimal Title Length Coverage */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-              <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>🎯 Perfect Title Length (50-60 chars)</span>
+              <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>🎯 Title Within Limit (≤ 50 chars)</span>
               <span style={{ fontSize: "14px", fontWeight: "700", color: "#108043" }}>
                 {stats.totalProducts > 0 ? Math.round((stats.withOptimalTitle / stats.totalProducts) * 100) : 0}%
               </span>
@@ -433,7 +428,7 @@ export default function Dashboard() {
         >
           {[
             { step: "1", icon: "🔍", title: "Search Your Catalog", desc: "Find any product from your full store catalog using the live search field." },
-            { step: "2", icon: "🤖", title: "Generate AI Content", desc: "Choose tone, audience & keywords. AI generates strict 50-60 char title & 150-160 char meta." },
+            { step: "2", icon: "🤖", title: "Generate AI Content", desc: "Choose tone, audience & keywords. AI writes a title under 50 chars and a complete description under 150 chars." },
             { step: "3", icon: "🎯", title: "Pick the Best Variation", desc: "Select from 3 AI-generated variations that best match your brand voice." },
             { step: "4", icon: "💾", title: "Save to Shopify", desc: "One click publishes your optimized SEO title & meta description directly into Shopify catalog." },
           ].map((item) => (

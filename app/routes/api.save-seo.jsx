@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { enforceSeoLimits } from "../lib/seoCopy";
 
 export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -14,6 +15,10 @@ export const action = async ({ request }) => {
 
       for (const item of items) {
         if (!item.productId || !item.seoTitle) continue;
+        const limited = enforceSeoLimits({
+          title: item.seoTitle,
+          description: item.seoDescription || "",
+        });
 
         try {
           const response = await admin.graphql(
@@ -39,8 +44,8 @@ export const action = async ({ request }) => {
                 input: {
                   id: item.productId,
                   seo: {
-                    title: item.seoTitle,
-                    description: item.seoDescription || "",
+                    title: limited.title,
+                    description: limited.description,
                   },
                 },
               },
@@ -79,6 +84,8 @@ export const action = async ({ request }) => {
       return Response.json({ success: false, error: "Missing required fields" }, { status: 400 });
     }
 
+    const limited = enforceSeoLimits({ title: seoTitle, description: seoDescription });
+
     const response = await admin.graphql(
       `#graphql
       mutation updateProductSeo($input: ProductInput!) {
@@ -102,8 +109,8 @@ export const action = async ({ request }) => {
           input: {
             id: productId,
             seo: {
-              title: seoTitle,
-              description: seoDescription,
+              title: limited.title,
+              description: limited.description,
             },
           },
         },

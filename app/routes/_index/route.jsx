@@ -270,7 +270,7 @@ export default function LandingPage() {
               AI SERP Clamp Engine
             </h3>
             <p style={{ fontSize: "14px", color: "#9ca3af", lineHeight: "1.6", margin: 0 }}>
-              Generates titles strictly within 50–60 chars and descriptions within 150–160 chars. Avoid Google truncation ellipses (...) forever.
+              Generates complete titles under 50 characters and full-sentence descriptions under 150 characters — no mid-sentence cutoffs.
             </p>
           </div>
 
