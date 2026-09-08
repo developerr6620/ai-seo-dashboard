@@ -2,7 +2,7 @@
 
 client_id = "cdeb2fd429e5b0cceb3d43906b7f2148"
 name = "AI SEO Dashboard"
-application_url = "https://example.com"
+application_url = "https://ai-seo-dashboard.onrender.com"
 embedded = true
 
 [access_scopes]
@@ -45,7 +45,7 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://ai-seo-dashboard.onrender.com/api/auth" ]
 
 [build]
 include_config_on_deploy = true
