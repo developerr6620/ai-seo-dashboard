@@ -8,7 +8,7 @@ export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
 
   try {
-    // Fetch store info and product counts in a single optimized query
+    // 1. Fetch store info, total products count (unlimited), and products batch
     const response = await admin.graphql(
       `#graphql
       query getDashboardData {
@@ -20,13 +20,18 @@ export const loader = async ({ request }) => {
             displayName
           }
         }
-        productsCount {
+        productsCount(limit: null) {
           count
         }
         products(first: 250) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
           edges {
             node {
               id
+              title
               seo {
                 title
                 description
@@ -42,23 +47,26 @@ export const loader = async ({ request }) => {
     const totalProducts = data?.data?.productsCount?.count || 0;
     const products = data?.data?.products?.edges?.map((e) => e.node) || [];
 
-    // Calculate stats from sample (first 250 products)
+    // Calculate REAL, ACCURATE statistics directly on the audited products
+    const auditedCount = products.length;
     const withSeoTitle = products.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
     const withSeoDesc = products.filter((p) => p.seo?.description && p.seo.description.trim().length > 0).length;
     const withOptimalTitle = products.filter((p) => isTitleOk(p.seo?.title)).length;
     const withOptimalDesc = products.filter((p) => isDescOk(p.seo?.description)).length;
 
-    // For larger catalogs, estimate stats based on sample
-    const sampleSize = products.length;
-    const sampleRatio = sampleSize > 0 ? totalProducts / sampleSize : 1;
+    const missingTitle = Math.max(0, auditedCount - withSeoTitle);
+    const missingDesc = Math.max(0, auditedCount - withSeoDesc);
 
-    const estimatedWithSeoTitle = totalProducts > 250 ? Math.round(withSeoTitle * sampleRatio) : withSeoTitle;
-    const estimatedWithSeoDesc = totalProducts > 250 ? Math.round(withSeoDesc * sampleRatio) : withSeoDesc;
-    const estimatedWithOptimalTitle = totalProducts > 250 ? Math.round(withOptimalTitle * sampleRatio) : withOptimalTitle;
-    const estimatedWithOptimalDesc = totalProducts > 250 ? Math.round(withOptimalDesc * sampleRatio) : withOptimalDesc;
+    const titleCoveragePct = auditedCount > 0 ? Math.round((withSeoTitle / auditedCount) * 100) : 0;
+    const descCoveragePct = auditedCount > 0 ? Math.round((withSeoDesc / auditedCount) * 100) : 0;
+    const optimalTitlePct = auditedCount > 0 ? Math.round((withOptimalTitle / auditedCount) * 100) : 0;
 
-    const missingTitle = totalProducts - estimatedWithSeoTitle;
-    const missingDesc = totalProducts - estimatedWithSeoDesc;
+    // Accurate SEO health score for audited products
+    const seoScore = auditedCount > 0
+      ? Math.round(((withSeoTitle + withSeoDesc) / (auditedCount * 2)) * 100)
+      : 0;
+
+    const isCatalogLarger = totalProducts > auditedCount;
 
     return {
       shop: {
@@ -69,34 +77,47 @@ export const loader = async ({ request }) => {
       },
       stats: {
         totalProducts,
-        withSeoTitle: estimatedWithSeoTitle,
-        withSeoDesc: estimatedWithSeoDesc,
-        withOptimalTitle: estimatedWithOptimalTitle,
-        withOptimalDesc: estimatedWithOptimalDesc,
+        auditedCount,
+        withSeoTitle,
+        withSeoDesc,
+        withOptimalTitle,
+        withOptimalDesc,
         missingTitle,
         missingDesc,
-        seoScore: totalProducts > 0 ? Math.round(((estimatedWithSeoTitle + estimatedWithSeoDesc) / (totalProducts * 2)) * 100) : 0,
+        titleCoveragePct,
+        descCoveragePct,
+        optimalTitlePct,
+        seoScore,
       },
       allProductsCount: totalProducts,
-      isEstimated: totalProducts > 250,
+      isCatalogLarger,
     };
   } catch (error) {
     console.error("Dashboard loader error:", error);
     return {
       shop: { name: "Your Store", domain: "", email: "", plan: "Shopify" },
       stats: {
-        totalProducts: 0, withSeoTitle: 0, withSeoDesc: 0,
-        withOptimalTitle: 0, withOptimalDesc: 0,
-        missingTitle: 0, missingDesc: 0, seoScore: 0,
+        totalProducts: 0,
+        auditedCount: 0,
+        withSeoTitle: 0,
+        withSeoDesc: 0,
+        withOptimalTitle: 0,
+        withOptimalDesc: 0,
+        missingTitle: 0,
+        missingDesc: 0,
+        titleCoveragePct: 0,
+        descCoveragePct: 0,
+        optimalTitlePct: 0,
+        seoScore: 0,
       },
       allProductsCount: 0,
-      isEstimated: false,
+      isCatalogLarger: false,
     };
   }
 };
 
 export default function Dashboard() {
-  const { shop, stats, allProductsCount, isEstimated } = useLoaderData();
+  const { shop, stats, allProductsCount, isCatalogLarger } = useLoaderData();
   const navigation = useNavigation();
   const isPageLoading = navigation.state === "loading";
 
@@ -127,9 +148,14 @@ export default function Dashboard() {
             <div style={{ fontSize: "14px", opacity: 0.85, marginBottom: "4px" }}>
               🌐 {shop.domain}
             </div>
-            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-              📦 {allProductsCount} Products in catalog &nbsp;|&nbsp; 🏷️ {shop.plan} Plan
+            <div style={{ fontSize: "13px", opacity: 0.85 }}>
+              📦 <strong>{allProductsCount.toLocaleString()}</strong> Products in catalog &nbsp;|&nbsp; 🏷️ {shop.plan} Plan
             </div>
+            {isCatalogLarger && (
+              <div style={{ fontSize: "12px", marginTop: "8px", background: "rgba(255,255,255,0.15)", padding: "4px 10px", borderRadius: "6px", display: "inline-block" }}>
+                🔍 Showing audited stats for <strong>{stats.auditedCount}</strong> products in your catalog
+              </div>
+            )}
           </div>
 
           {/* Overall SEO Score Ring */}
@@ -140,23 +166,22 @@ export default function Dashboard() {
               padding: "20px 28px",
               textAlign: "center",
               backdropFilter: "blur(10px)",
+              minWidth: "160px",
             }}
           >
-            <div style={{ fontSize: "12px", opacity: 0.8, marginBottom: "6px", fontWeight: "600" }}>
-              STORE SEO HEALTH
+            <div style={{ fontSize: "12px", opacity: 0.85, marginBottom: "6px", fontWeight: "600" }}>
+              {isCatalogLarger ? "AUDITED BATCH HEALTH" : "STORE SEO HEALTH"}
             </div>
             <div style={{ fontSize: "52px", fontWeight: "900", lineHeight: 1 }}>
               {stats.seoScore}
             </div>
             <div style={{ fontSize: "13px", opacity: 0.85 }}>/ 100</div>
-            <div style={{ fontSize: "12px", marginTop: "6px", opacity: 0.75 }}>
+            <div style={{ fontSize: "12px", marginTop: "6px", fontWeight: "600" }}>
               {stats.seoScore >= 80 ? "🟢 Excellent" : stats.seoScore >= 50 ? "🟡 Needs Work" : "🔴 Critical"}
             </div>
-            {isEstimated && (
-              <div style={{ fontSize: "10px", marginTop: "4px", opacity: 0.6, fontStyle: "italic" }}>
-                * Based on sample of 250 products
-              </div>
-            )}
+            <div style={{ fontSize: "11px", marginTop: "4px", opacity: 0.75 }}>
+              Based on {stats.auditedCount} audited products
+            </div>
           </div>
         </div>
       </s-section>
@@ -182,8 +207,15 @@ export default function Dashboard() {
             }}
           >
             <div style={{ fontSize: "32px", marginBottom: "8px" }}>📦</div>
-            <div style={{ fontSize: "32px", fontWeight: "800", color: "#202223" }}>{stats.totalProducts}</div>
-            <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Total Products</div>
+            <div style={{ fontSize: "32px", fontWeight: "800", color: "#202223" }}>
+              {stats.totalProducts.toLocaleString()}
+            </div>
+            <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Total Catalog Products</div>
+            {isCatalogLarger && (
+              <div style={{ fontSize: "11px", color: "#008060", marginTop: "4px", fontWeight: "600" }}>
+                ({stats.auditedCount} audited)
+              </div>
+            )}
           </div>
 
           {/* With SEO Title */}
@@ -198,11 +230,17 @@ export default function Dashboard() {
             }}
           >
             <div style={{ fontSize: "32px", marginBottom: "8px" }}>🏷️</div>
-            <div style={{ fontSize: "32px", fontWeight: "800", color: "#108043" }}>{stats.withSeoTitle}</div>
+            <div style={{ fontSize: "32px", fontWeight: "800", color: "#108043" }}>
+              {stats.withSeoTitle}
+            </div>
             <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Have SEO Title</div>
-            {stats.missingTitle > 0 && (
+            {stats.missingTitle > 0 ? (
               <div style={{ fontSize: "11px", color: "#d9381e", marginTop: "4px", fontWeight: "600" }}>
-                ⚠️ {stats.missingTitle} missing
+                ⚠️ {stats.missingTitle} missing {isCatalogLarger ? `(in ${stats.auditedCount} audited)` : ""}
+              </div>
+            ) : (
+              <div style={{ fontSize: "11px", color: "#108043", marginTop: "4px", fontWeight: "600" }}>
+                ✓ All {stats.auditedCount} audited have titles
               </div>
             )}
           </div>
@@ -219,11 +257,17 @@ export default function Dashboard() {
             }}
           >
             <div style={{ fontSize: "32px", marginBottom: "8px" }}>📝</div>
-            <div style={{ fontSize: "32px", fontWeight: "800", color: "#108043" }}>{stats.withSeoDesc}</div>
+            <div style={{ fontSize: "32px", fontWeight: "800", color: "#108043" }}>
+              {stats.withSeoDesc}
+            </div>
             <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Have Meta Description</div>
-            {stats.missingDesc > 0 && (
+            {stats.missingDesc > 0 ? (
               <div style={{ fontSize: "11px", color: "#d9381e", marginTop: "4px", fontWeight: "600" }}>
-                ⚠️ {stats.missingDesc} missing
+                ⚠️ {stats.missingDesc} missing {isCatalogLarger ? `(in ${stats.auditedCount} audited)` : ""}
+              </div>
+            ) : (
+              <div style={{ fontSize: "11px", color: "#108043", marginTop: "4px", fontWeight: "600" }}>
+                ✓ All {stats.auditedCount} audited have descriptions
               </div>
             )}
           </div>
@@ -240,7 +284,9 @@ export default function Dashboard() {
             }}
           >
             <div style={{ fontSize: "32px", marginBottom: "8px" }}>🎯</div>
-            <div style={{ fontSize: "32px", fontWeight: "800", color: "#008060" }}>{stats.withOptimalTitle}</div>
+            <div style={{ fontSize: "32px", fontWeight: "800", color: "#008060" }}>
+              {stats.withOptimalTitle}
+            </div>
             <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Perfect SEO Length</div>
             <div style={{ fontSize: "11px", color: "#6d7175", marginTop: "4px" }}>
               (title ≤ 50 chars)
@@ -260,12 +306,44 @@ export default function Dashboard() {
             boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
           }}
         >
+          {isCatalogLarger && (
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "8px",
+                padding: "12px 16px",
+                marginBottom: "20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "8px",
+              }}
+            >
+              <div style={{ fontSize: "13px", color: "#166534" }}>
+                ℹ️ <strong>Audited Scope:</strong> Showing accurate measurements from <strong>{stats.auditedCount}</strong> of <strong>{stats.totalProducts.toLocaleString()}</strong> products in your catalog.
+              </div>
+              <Link
+                to="/app/bulk-optimizer"
+                style={{
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  color: "#15803d",
+                  textDecoration: "underline",
+                }}
+              >
+                Browse & Optimize All Pages in Bulk Optimizer →
+              </Link>
+            </div>
+          )}
+
           {/* Title Coverage */}
           <div style={{ marginBottom: "20px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
               <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>🏷️ SEO Title Coverage</span>
               <span style={{ fontSize: "14px", fontWeight: "700", color: "#108043" }}>
-                {stats.totalProducts > 0 ? Math.round((stats.withSeoTitle / stats.totalProducts) * 100) : 0}%
+                {stats.titleCoveragePct}%
               </span>
             </div>
             <div style={{ background: "#f1f2f3", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
@@ -274,13 +352,13 @@ export default function Dashboard() {
                   background: "#008060",
                   height: "100%",
                   borderRadius: "8px",
-                  width: `${stats.totalProducts > 0 ? (stats.withSeoTitle / stats.totalProducts) * 100 : 0}%`,
+                  width: `${stats.titleCoveragePct}%`,
                   transition: "width 0.6s ease",
                 }}
               />
             </div>
             <div style={{ fontSize: "12px", color: "#6d7175", marginTop: "4px" }}>
-              {stats.withSeoTitle} of {stats.totalProducts} products have SEO title
+              {stats.withSeoTitle} of {stats.auditedCount} audited products have SEO title
             </div>
           </div>
 
@@ -289,7 +367,7 @@ export default function Dashboard() {
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
               <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>📝 Meta Description Coverage</span>
               <span style={{ fontSize: "14px", fontWeight: "700", color: "#108043" }}>
-                {stats.totalProducts > 0 ? Math.round((stats.withSeoDesc / stats.totalProducts) * 100) : 0}%
+                {stats.descCoveragePct}%
               </span>
             </div>
             <div style={{ background: "#f1f2f3", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
@@ -298,13 +376,13 @@ export default function Dashboard() {
                   background: "#5c6ac4",
                   height: "100%",
                   borderRadius: "8px",
-                  width: `${stats.totalProducts > 0 ? (stats.withSeoDesc / stats.totalProducts) * 100 : 0}%`,
+                  width: `${stats.descCoveragePct}%`,
                   transition: "width 0.6s ease",
                 }}
               />
             </div>
             <div style={{ fontSize: "12px", color: "#6d7175", marginTop: "4px" }}>
-              {stats.withSeoDesc} of {stats.totalProducts} products have meta description
+              {stats.withSeoDesc} of {stats.auditedCount} audited products have meta description
             </div>
           </div>
 
@@ -313,7 +391,7 @@ export default function Dashboard() {
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
               <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>🎯 Title Within Limit (≤ 50 chars)</span>
               <span style={{ fontSize: "14px", fontWeight: "700", color: "#108043" }}>
-                {stats.totalProducts > 0 ? Math.round((stats.withOptimalTitle / stats.totalProducts) * 100) : 0}%
+                {stats.optimalTitlePct}%
               </span>
             </div>
             <div style={{ background: "#f1f2f3", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
@@ -322,13 +400,13 @@ export default function Dashboard() {
                   background: "#f49342",
                   height: "100%",
                   borderRadius: "8px",
-                  width: `${stats.totalProducts > 0 ? (stats.withOptimalTitle / stats.totalProducts) * 100 : 0}%`,
+                  width: `${stats.optimalTitlePct}%`,
                   transition: "width 0.6s ease",
                 }}
               />
             </div>
             <div style={{ fontSize: "12px", color: "#6d7175", marginTop: "4px" }}>
-              {stats.withOptimalTitle} of {stats.totalProducts} products have perfectly sized titles
+              {stats.withOptimalTitle} of {stats.auditedCount} audited products have perfectly sized titles
             </div>
           </div>
         </div>
