@@ -125,13 +125,13 @@ export default function SeoOptimizer() {
         body: JSON.stringify({ productId: selectedProduct.id, seoTitle, seoDescription }),
       });
       const data = await res.json();
-      setIsSaving(false);
       if (data.success) {
         setFeedbackMessage({ type: "success", text: `🎉 SEO Saved! Title (${seoTitle.length} chars) & Meta (${seoDescription.length} chars) published to Shopify.` });
         if (shopify?.toast) shopify.toast.show("✅ Saved SEO to Shopify catalog!");
-        selectedProduct.seoTitle = seoTitle;
-        selectedProduct.seoDescription = seoDescription;
+        // Reload to get fresh data from Shopify
+        setTimeout(() => window.location.reload(), 1500);
       } else {
+        setIsSaving(false);
         setFeedbackMessage({ type: "error", text: `❌ Error: ${data.error || "Failed to update product"}` });
       }
     } catch (err) {

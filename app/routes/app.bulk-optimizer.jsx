@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo } from "react";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -61,7 +61,8 @@ export const loader = async ({ request }) => {
 
 export default function BulkOptimizer() {
   const loaderData = useLoaderData();
-  const [products, setProducts] = useState(loaderData?.products || []);
+  const navigate = useNavigate();
+  const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const pagination = loaderData?.pagination || {
     currentPage: 1,
     hasNextPage: false,
@@ -84,7 +85,6 @@ export default function BulkOptimizer() {
   const [proposedUpdates, setProposedUpdates] = useState({}); // { [productId]: { seoTitle, seoDescription } }
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
-  const [isLoadingPage, setIsLoadingPage] = useState(false);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -227,50 +227,23 @@ export default function BulkOptimizer() {
       const data = await resp.json();
 
       if (data.success) {
-        // Update local state
-        const updated = products.map((p) => {
-          const prop = proposedUpdates[p.id];
-          if (selectedIds.has(p.id) && prop) {
-            return {
-              ...p,
-              seoTitle: prop.seoTitle,
-              seoDescription: prop.seoDescription,
-            };
-          }
-          return p;
-        });
-        setProducts(updated);
-        setToastMessage(`🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products to Shopify catalog.`);
-        setSelectedIds(new Set());
+        // Reload the page to get fresh data from Shopify
+        window.location.reload();
       } else {
         alert(`Save failed: ${data.error || "Unknown error"}`);
+        setIsBulkSaving(false);
       }
     } catch (err) {
       console.error("Bulk save error:", err);
       alert("Error saving updates to Shopify.");
-    } finally {
       setIsBulkSaving(false);
-      setTimeout(() => setToastMessage(null), 6000);
     }
   };
 
   // Pagination handlers
-  const handlePageChange = async (newPage) => {
-    if (newPage < 1 || newPage > pagination.totalPages || isLoadingPage) return;
-
-    setIsLoadingPage(true);
-    setSelectedIds(new Set());
-    setProposedUpdates({});
-
-    try {
-      // Navigate to the new page - React Router will handle the loader
-      window.location.href = `/app/bulk-optimizer?page=${newPage}`;
-    } catch (error) {
-      console.error("Error loading page:", error);
-      setToastMessage("Error loading page. Please try again.");
-      setTimeout(() => setToastMessage(null), 3000);
-      setIsLoadingPage(false);
-    }
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > pagination.totalPages) return;
+    navigate(`/app/bulk-optimizer?page=${newPage}`);
   };
 
   return (
@@ -503,32 +476,32 @@ export default function BulkOptimizer() {
             <div style={{ display: "flex", gap: "8px" }}>
               <button
                 onClick={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={!pagination.hasPreviousPage || isLoadingPage}
+                disabled={!pagination.hasPreviousPage}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "6px",
                   border: "1px solid #c9cccf",
-                  background: pagination.hasPreviousPage && !isLoadingPage ? "#ffffff" : "#f1f2f3",
-                  color: pagination.hasPreviousPage && !isLoadingPage ? "#202223" : "#9aa0a6",
+                  background: pagination.hasPreviousPage ? "#ffffff" : "#f1f2f3",
+                  color: pagination.hasPreviousPage ? "#202223" : "#9aa0a6",
                   fontSize: "13px",
                   fontWeight: "500",
-                  cursor: pagination.hasPreviousPage && !isLoadingPage ? "pointer" : "not-allowed",
+                  cursor: pagination.hasPreviousPage ? "pointer" : "not-allowed",
                 }}
               >
                 ← Previous
               </button>
               <button
                 onClick={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={!pagination.hasNextPage || isLoadingPage}
+                disabled={!pagination.hasNextPage}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "6px",
                   border: "1px solid #c9cccf",
-                  background: pagination.hasNextPage && !isLoadingPage ? "#ffffff" : "#f1f2f3",
-                  color: pagination.hasNextPage && !isLoadingPage ? "#202223" : "#9aa0a6",
+                  background: pagination.hasNextPage ? "#ffffff" : "#f1f2f3",
+                  color: pagination.hasNextPage ? "#202223" : "#9aa0a6",
                   fontSize: "13px",
                   fontWeight: "500",
-                  cursor: pagination.hasNextPage && !isLoadingPage ? "pointer" : "not-allowed",
+                  cursor: pagination.hasNextPage ? "pointer" : "not-allowed",
                 }}
               >
                 Next →
@@ -540,13 +513,7 @@ export default function BulkOptimizer() {
 
       {/* Products Table with Side-by-Side Review */}
       <s-section>
-        {isLoadingPage ? (
-          <div style={{ padding: "40px", textAlign: "center", color: "#6d7175" }}>
-            <div style={{ fontSize: "16px", marginBottom: "8px" }}>Loading products...</div>
-            <div style={{ fontSize: "13px" }}>Please wait while we fetch the next page</div>
-          </div>
-        ) : (
-          <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e1e3e5", overflow: "hidden" }}>
+        <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e1e3e5", overflow: "hidden" }}>
           <div style={{ padding: "12px 16px", borderBottom: "1px solid #e1e3e5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <input
@@ -721,7 +688,6 @@ export default function BulkOptimizer() {
             </table>
           </div>
         </div>
-        )}
       </s-section>
     </s-page>
   );
