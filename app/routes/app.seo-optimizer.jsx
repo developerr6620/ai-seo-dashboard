@@ -1,7 +1,7 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -61,7 +61,6 @@ export const loader = async ({ request }) => {
 
 export default function SeoOptimizer() {
   const loaderData = useLoaderData();
-  const navigate = useNavigate();
   const navigation = useNavigation();
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const hasMore = loaderData?.hasMore || false;
@@ -71,7 +70,11 @@ export default function SeoOptimizer() {
   const [selectedProduct, setSelectedProduct] = useState(products[0] || null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [allProducts] = useState(products);
+  const [allProducts, setAllProducts] = useState(products);
+
+  useEffect(() => {
+    setAllProducts(products);
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return allProducts;
@@ -155,10 +158,23 @@ export default function SeoOptimizer() {
       });
       const data = await res.json();
       if (data.success) {
-        setFeedbackMessage({ type: "success", text: `🎉 SEO Saved! Title (${seoTitle.length} chars) & Meta (${seoDescription.length} chars) published to Shopify.` });
+        setIsSaving(false);
+        setFeedbackMessage({
+          type: "success",
+          text: `🎉 SEO Saved! Title (${seoTitle.length} chars) & Meta (${seoDescription.length} chars) published to Shopify.`,
+        });
         if (shopify?.toast) shopify.toast.show("✅ Saved SEO to Shopify catalog!");
-        // Navigate to refresh the page and get fresh data
-        setTimeout(() => navigate(0), 1500);
+        // Update local product state so it reflects the newly published SEO data immediately without page reload
+        setSelectedProduct((prev) =>
+          prev ? { ...prev, seoTitle, seoDescription } : prev
+        );
+        setAllProducts((prev) =>
+          prev.map((p) =>
+            p.id === selectedProduct.id
+              ? { ...p, seoTitle, seoDescription }
+              : p
+          )
+        );
       } else {
         setIsSaving(false);
         setFeedbackMessage({ type: "error", text: `❌ Error: ${data.error || "Failed to update product"}` });

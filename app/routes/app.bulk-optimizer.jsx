@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect } from "react-router";
+import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -211,6 +211,7 @@ export const loader = async ({ request }) => {
 export default function BulkOptimizer() {
   const loaderData = useLoaderData();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
@@ -389,8 +390,9 @@ export default function BulkOptimizer() {
         setToastMessage(`🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products to Shopify catalog.`);
         setSelectedIds(new Set());
         setProposedUpdates({});
-        // Navigate to refresh the page and get fresh data
-        navigate(0);
+        // Revalidate loader data (re-runs the loader) without a full page nav — safe in embedded app context
+        revalidator.revalidate();
+        setIsBulkSaving(false);
       } else {
         alert(`Save failed: ${data.error || "Unknown error"}`);
         setIsBulkSaving(false);
