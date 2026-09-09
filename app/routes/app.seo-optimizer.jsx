@@ -8,7 +8,7 @@ import { authenticate } from "../shopify.server";
 import {
   DESC_MAX,
   TITLE_MAX,
-  generateSeoVariations,
+  generateSeoCopy,
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
@@ -82,13 +82,11 @@ export default function SeoOptimizer() {
 
   const [keywords, setKeywords] = useState("");
   const [tone, setTone] = useState("High-Converting");
-  const [targetAudience, setTargetAudience] = useState("General Shoppers");
 
   const [seoTitle, setSeoTitle] = useState(selectedProduct?.seoTitle || "");
   const [seoDescription, setSeoDescription] = useState(selectedProduct?.seoDescription || "");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [aiVariations, setAiVariations] = useState([]);
   const [feedbackMessage, setFeedbackMessage] = useState(null);
 
   const selectProduct = (prod) => {
@@ -96,7 +94,6 @@ export default function SeoOptimizer() {
     setSearchQuery(prod.title);
     setSeoTitle(prod.seoTitle);
     setSeoDescription(prod.seoDescription);
-    setAiVariations([]);
     setIsDropdownOpen(false);
     setFeedbackMessage(null);
   };
@@ -128,19 +125,21 @@ export default function SeoOptimizer() {
     if (!selectedProduct) return;
     setIsGenerating(true);
     setTimeout(() => {
-      const strictVariations = generateSeoVariations({
+      const generated = generateSeoCopy({
         productTitle: selectedProduct.title,
         productDescription: selectedProduct.description,
         keywords,
         tone,
-        audience: targetAudience,
-      }).map((item) => ({ title: item.title, desc: item.description }));
+      });
 
-      setAiVariations(strictVariations);
-      setSeoTitle(strictVariations[0].title);
-      setSeoDescription(strictVariations[0].desc);
+      setSeoTitle(generated.title);
+      setSeoDescription(generated.description);
       setIsGenerating(false);
-      if (shopify?.toast) shopify.toast.show("✨ Generated Strict SEO Content!");
+      setFeedbackMessage({
+        type: "info",
+        text: "✨ Generated 1 best SEO recommendation! Review or tweak it below, then click 'Save SEO Changes to Shopify Store' to save.",
+      });
+      if (shopify?.toast) shopify.toast.show("✨ Generated best SEO content!");
     }, 300);
   };
 
@@ -171,7 +170,7 @@ export default function SeoOptimizer() {
   };
 
   return (
-    <s-page heading="⚡ AI SEO Optimizer">
+    <s-page heading="AI SEO Optimizer">
       <s-section heading="Product Catalog SEO Optimizer">
         <s-paragraph>
           Search your store catalog, generate titles under {TITLE_MAX} characters and complete meta descriptions under {DESC_MAX} characters, then publish directly to Shopify.
@@ -202,7 +201,7 @@ export default function SeoOptimizer() {
                     value={searchQuery}
                     onFocus={() => setIsDropdownOpen(true)}
                     onChange={(e) => { setSearchQuery(e.target.value); setIsDropdownOpen(true); }}
-                    style={{ width: "100%", padding: "12px 16px", borderRadius: "8px", border: "1.5px solid #008060", fontSize: "15px", fontWeight: "500", outline: "none", backgroundColor: "#ffffff" }}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "12px 16px", borderRadius: "8px", border: "1.5px solid #008060", fontSize: "15px", fontWeight: "500", outline: "none", backgroundColor: "#ffffff" }}
                   />
                   {isDropdownOpen && (
                     <div style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "260px", overflowY: "auto", backgroundColor: "#ffffff", border: "1px solid #c9cccf", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.15)", zIndex: 999, marginTop: "4px" }}>
@@ -238,27 +237,33 @@ export default function SeoOptimizer() {
               <s-box padding="base" borderWidth="base" borderRadius="base">
                 <s-stack direction="block" gap="base">
                   <s-text font-weight="bold" font-size="medium">🤖 2. AI Generator Controls</s-text>
-                  <s-stack direction="inline" gap="base">
-                    <div style={{ flex: 1 }}>
-                      <s-text font-weight="bold">Tone of Voice</s-text>
-                      <select style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #c9cccf", fontSize: "14px", width: "100%", marginTop: "4px" }} value={tone} onChange={(e) => setTone(e.target.value)}>
-                        <option value="High-Converting">High-Converting & Sales</option>
-                        <option value="Luxury & Authoritative">Luxury & Premium</option>
-                        <option value="Friendly & Engaging">Friendly & Engaging</option>
-                        <option value="Urgent & Promotional">Urgent & Promotional</option>
-                      </select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <s-text font-weight="bold">Target Audience</s-text>
-                      <select style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #c9cccf", fontSize: "14px", width: "100%", marginTop: "4px" }} value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)}>
-                        <option value="General Shoppers">General Shoppers</option>
-                        <option value="Bargain Hunters">Bargain Hunters</option>
-                        <option value="Luxury Buyers">Luxury Buyers</option>
-                        <option value="Gifting & Holidays">Gifting & Holidays</option>
-                      </select>
-                    </div>
-                  </s-stack>
-                  <s-text-field label="Focus Keywords" value={keywords} onChange={(e) => setKeywords(e.currentTarget.value)} details="Example: eco-friendly, premium quality, top rated"></s-text-field>
+                  <div>
+                    <s-text font-weight="bold">Tone of Voice</s-text>
+                    <select
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid #c9cccf",
+                        fontSize: "14px",
+                        width: "100%",
+                        marginTop: "4px",
+                        backgroundColor: "#ffffff",
+                      }}
+                      value={tone}
+                      onChange={(e) => setTone(e.target.value)}
+                    >
+                      <option value="High-Converting">High-Converting & Sales</option>
+                      <option value="Luxury & Authoritative">Luxury & Premium</option>
+                      <option value="Friendly & Engaging">Friendly & Engaging</option>
+                      <option value="Urgent & Promotional">Urgent & Promotional</option>
+                    </select>
+                  </div>
+                  <s-text-field
+                    label="Focus Keywords (Optional)"
+                    value={keywords}
+                    onChange={(e) => setKeywords(e.currentTarget.value)}
+                    details="Example: eco-friendly, premium quality, top rated"
+                  />
                   <s-button
                     onClick={handleGenerateAI}
                     disabled={isGenerating}
@@ -266,29 +271,6 @@ export default function SeoOptimizer() {
                   >
                     {isGenerating ? "✨ Generating AI SEO..." : `✨ Generate SEO (title ≤ ${TITLE_MAX} / description ≤ ${DESC_MAX})`}
                   </s-button>
-                </s-stack>
-              </s-box>
-            )}
-
-            {/* Variations */}
-            {aiVariations.length > 0 && (
-              <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-                <s-stack direction="block" gap="base">
-                  <s-text font-weight="bold">🎯 Select an AI Variation to Apply:</s-text>
-                  {aiVariations.map((v, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { setSeoTitle(v.title); setSeoDescription(v.desc); }}
-                      style={{ padding: "14px", borderRadius: "8px", border: "1.5px solid #008060", background: "#ffffff", cursor: "pointer", marginBottom: "8px", width: "100%", textAlign: "left" }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontWeight: "bold", color: "#008060", fontSize: "14px" }}>Option {i + 1}: {v.title}</span>
-                        <span style={{ fontSize: "12px", background: "#e3f8e0", color: "#108043", padding: "2px 8px", borderRadius: "10px", fontWeight: "bold" }}>{v.title.length} chars</span>
-                      </div>
-                      <div style={{ fontSize: "13px", color: "#4a4a4a", marginTop: "6px" }}>{v.desc}</div>
-                      <div style={{ marginTop: "4px", fontSize: "12px", color: "#108043", fontWeight: "bold" }}>Meta: {v.desc.length} chars ✓</div>
-                    </button>
-                  ))}
                 </s-stack>
               </s-box>
             )}
@@ -304,7 +286,30 @@ export default function SeoOptimizer() {
                 </s-stack>
 
                 {feedbackMessage && (
-                  <div style={{ padding: "12px 16px", borderRadius: "8px", backgroundColor: feedbackMessage.type === "success" ? "#e3f8e0" : "#fbeae5", color: feedbackMessage.type === "success" ? "#108043" : "#d9381e", fontWeight: "600", fontSize: "14px" }}>
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderRadius: "8px",
+                      backgroundColor:
+                        feedbackMessage.type === "success"
+                          ? "#e3f8e0"
+                          : feedbackMessage.type === "info"
+                          ? "#e7f4fe"
+                          : "#fbeae5",
+                      color:
+                        feedbackMessage.type === "success"
+                          ? "#108043"
+                          : feedbackMessage.type === "info"
+                          ? "#0c5460"
+                          : "#d9381e",
+                      border:
+                        feedbackMessage.type === "info"
+                          ? "1px solid #bee5eb"
+                          : "none",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
                     {feedbackMessage.text}
                   </div>
                 )}

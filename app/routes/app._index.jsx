@@ -122,7 +122,7 @@ export default function Dashboard() {
   const isPageLoading = navigation.state === "loading";
 
   return (
-    <s-page heading={`👋 Welcome back, ${shop.name}`}>
+    <s-page heading={`Welcome, ${shop.name}`}>
       {/* Store Overview Banner */}
       <s-section>
         <div
@@ -206,11 +206,11 @@ export default function Dashboard() {
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>📦</div>
+            <div style={{ fontSize: "32px", marginBottom: "15px" }}>📦</div>
             <div style={{ fontSize: "32px", fontWeight: "800", color: "#202223" }}>
               {stats.totalProducts.toLocaleString()}
             </div>
-            <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Total Catalog Products</div>
+            <div style={{ fontSize: "13px", color: "#616161", marginTop: "10px" }}>Total Catalog Products</div>
             {isCatalogLarger && (
               <div style={{ fontSize: "11px", color: "#008060", marginTop: "4px", fontWeight: "600" }}>
                 ({stats.auditedCount} audited)
@@ -229,17 +229,17 @@ export default function Dashboard() {
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>🏷️</div>
+            <div style={{ fontSize: "32px", marginBottom: "15px" }}>🏷️</div>
             <div style={{ fontSize: "32px", fontWeight: "800", color: "#108043" }}>
               {stats.withSeoTitle}
             </div>
-            <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Have SEO Title</div>
+            <div style={{ fontSize: "13px", color: "#616161", marginTop: "10px" }}>Have SEO Title</div>
             {stats.missingTitle > 0 ? (
               <div style={{ fontSize: "11px", color: "#d9381e", marginTop: "4px", fontWeight: "600" }}>
                 ⚠️ {stats.missingTitle} missing {isCatalogLarger ? `(in ${stats.auditedCount} audited)` : ""}
               </div>
             ) : (
-              <div style={{ fontSize: "11px", color: "#108043", marginTop: "4px", fontWeight: "600" }}>
+              <div style={{ fontSize: "11px", color: "#108043", marginTop: "10px", fontWeight: "600" }}>
                 ✓ All {stats.auditedCount} audited have titles
               </div>
             )}
@@ -256,11 +256,11 @@ export default function Dashboard() {
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>📝</div>
+            <div style={{ fontSize: "32px", marginBottom: "15px" }}>📝</div>
             <div style={{ fontSize: "32px", fontWeight: "800", color: "#108043" }}>
               {stats.withSeoDesc}
             </div>
-            <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Have Meta Description</div>
+            <div style={{ fontSize: "13px", color: "#616161", marginTop: "10px" }}>Have Meta Description</div>
             {stats.missingDesc > 0 ? (
               <div style={{ fontSize: "11px", color: "#d9381e", marginTop: "4px", fontWeight: "600" }}>
                 ⚠️ {stats.missingDesc} missing {isCatalogLarger ? `(in ${stats.auditedCount} audited)` : ""}
@@ -283,11 +283,11 @@ export default function Dashboard() {
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: "32px", marginBottom: "8px" }}>🎯</div>
+            <div style={{ fontSize: "32px", marginBottom: "15px" }}>🎯</div>
             <div style={{ fontSize: "32px", fontWeight: "800", color: "#008060" }}>
               {stats.withOptimalTitle}
             </div>
-            <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>Perfect SEO Length</div>
+            <div style={{ fontSize: "13px", color: "#616161", marginTop: "10px" }}>Perfect SEO Length</div>
             <div style={{ fontSize: "11px", color: "#6d7175", marginTop: "4px" }}>
               (title ≤ 50 chars)
             </div>
@@ -438,9 +438,7 @@ export default function Dashboard() {
                 textAlign: "left",
               }}
             >
-            <div style={{ position: "absolute", top: "12px", right: "12px", background: "#10b981", color: "#ffffff", fontSize: "10px", fontWeight: "800", padding: "2px 8px", borderRadius: "10px" }}>
-              NEW
-            </div>
+
             <div style={{ fontSize: "28px", marginBottom: "10px" }}>🚀</div>
             <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>1-Click Bulk Optimizer</div>
             <div style={{ fontSize: "13px", opacity: 0.85, lineHeight: "1.4" }}>
@@ -524,7 +522,7 @@ export default function Dashboard() {
       </s-section>
 
       {/* How It Works */}
-      <s-section heading="💡 How AI SEO Content Master Works">
+      <s-section heading="How It Works">
         <div
           style={{
             display: "grid",
@@ -533,10 +531,10 @@ export default function Dashboard() {
           }}
         >
           {[
-            { step: "1", icon: "🔍", title: "Search Your Catalog", desc: "Find any product from your full store catalog using the live search field." },
-            { step: "2", icon: "🤖", title: "Generate AI Content", desc: "Choose tone, audience & keywords. AI writes a title under 50 chars and a complete description under 150 chars." },
-            { step: "3", icon: "🎯", title: "Pick the Best Variation", desc: "Select from 3 AI-generated variations that best match your brand voice." },
-            { step: "4", icon: "💾", title: "Save to Shopify", desc: "One click publishes your optimized SEO title & meta description directly into Shopify catalog." },
+            { step: "1", icon: "🔍", title: "Search & Select", desc: "Find any product from your store catalog using the live search field." },
+            { step: "2", icon: "🤖", title: "Generate AI SEO", desc: "Choose a tone, add optional keywords, and let AI generate 1 optimized title and meta description instantly." },
+            { step: "3", icon: "✏️", title: "Review & Tweak", desc: "Preview the Google snippet, adjust the text if needed, and confirm the SEO score is green." },
+            { step: "4", icon: "💾", title: "Save to Shopify", desc: "One click publishes your optimized SEO directly to your Shopify product catalog." },
           ].map((item) => (
             <div
               key={item.step}
@@ -548,14 +546,14 @@ export default function Dashboard() {
                 textAlign: "center",
               }}
             >
-              <div style={{ fontSize: "28px", marginBottom: "10px" }}>{item.icon}</div>
+              <div style={{ fontSize: "26px", marginBottom: "10px" }}>{item.icon}</div>
               <div
                 style={{
                   background: "#008060",
                   color: "#ffffff",
                   borderRadius: "50%",
-                  width: "24px",
-                  height: "24px",
+                  width: "22px",
+                  height: "22px",
                   fontSize: "12px",
                   fontWeight: "800",
                   display: "inline-flex",
@@ -566,7 +564,7 @@ export default function Dashboard() {
               >
                 {item.step}
               </div>
-              <div style={{ fontSize: "15px", fontWeight: "700", color: "#202223", marginBottom: "6px" }}>
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "#202223", marginBottom: "6px" }}>
                 {item.title}
               </div>
               <div style={{ fontSize: "13px", color: "#616161", lineHeight: "1.5" }}>
