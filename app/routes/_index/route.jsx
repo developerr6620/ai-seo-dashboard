@@ -1,4 +1,4 @@
-import { redirect } from "react-router";
+import { redirect, useNavigate } from "react-router";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -16,6 +16,7 @@ export const loader = async ({ request }) => {
 };
 
 export default function LandingPage() {
+  const navigate = useNavigate();
   const [shopDomain, setShopDomain] = useState("");
 
   const handleInstall = (e) => {
@@ -25,7 +26,7 @@ export default function LandingPage() {
     if (!clean.includes(".myshopify.com")) {
       clean = `${clean}.myshopify.com`;
     }
-    window.location.href = `/auth/login?shop=${encodeURIComponent(clean)}`;
+    navigate(`/auth/login?shop=${encodeURIComponent(clean)}`);
   };
 
   return (

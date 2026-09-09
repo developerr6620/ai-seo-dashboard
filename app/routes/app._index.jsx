@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
-import { useLoaderData } from "react-router";
+import { useLoaderData, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { isDescOk, isTitleOk } from "../lib/seoCopy";
@@ -313,22 +313,22 @@ export default function Dashboard() {
           }}
         >
           {/* 1-Click Bulk Optimizer */}
-          <button
-            onClick={() => { window.location.href = "/app/bulk-optimizer"; }}
-            style={{
-              background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
-              borderRadius: "12px",
-              padding: "24px",
-              cursor: "pointer",
-              color: "#ffffff",
-              boxShadow: "0 4px 16px rgba(15, 23, 42, 0.4)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              position: "relative",
-              overflow: "hidden",
-              width: "100%",
-              textAlign: "left",
-            }}
-          >
+          <Link to="/app/bulk-optimizer" style={{ textDecoration: "none" }}>
+            <button
+              style={{
+                background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+                borderRadius: "12px",
+                padding: "24px",
+                cursor: "pointer",
+                color: "#ffffff",
+                boxShadow: "0 4px 16px rgba(15, 23, 42, 0.4)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                position: "relative",
+                overflow: "hidden",
+                width: "100%",
+                textAlign: "left",
+              }}
+            >
             <div style={{ position: "absolute", top: "12px", right: "12px", background: "#10b981", color: "#ffffff", fontSize: "10px", fontWeight: "800", padding: "2px 8px", borderRadius: "10px" }}>
               NEW
             </div>
@@ -340,22 +340,23 @@ export default function Dashboard() {
             <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: "#34d399" }}>
               Launch Bulk Tool →
             </div>
-          </button>
+            </button>
+          </Link>
 
           {/* Start Single SEO Optimizer */}
-          <button
-            onClick={() => { window.location.href = "/app/seo-optimizer"; }}
-            style={{
-              background: "linear-gradient(135deg, #008060, #004c3f)",
-              borderRadius: "12px",
-              padding: "24px",
-              cursor: "pointer",
-              color: "#ffffff",
-              boxShadow: "0 4px 12px rgba(0,128,96,0.3)",
-              width: "100%",
-              textAlign: "left",
-            }}
-          >
+          <Link to="/app/seo-optimizer" style={{ textDecoration: "none" }}>
+            <button
+              style={{
+                background: "linear-gradient(135deg, #008060, #004c3f)",
+                borderRadius: "12px",
+                padding: "24px",
+                cursor: "pointer",
+                color: "#ffffff",
+                boxShadow: "0 4px 12px rgba(0,128,96,0.3)",
+                width: "100%",
+                textAlign: "left",
+              }}
+            >
             <div style={{ fontSize: "28px", marginBottom: "10px" }}>⚡</div>
             <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>Single Optimizer</div>
             <div style={{ fontSize: "13px", opacity: 0.85 }}>
@@ -364,7 +365,8 @@ export default function Dashboard() {
             <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", opacity: 0.9 }}>
               Open Single Tool →
             </div>
-          </button>
+            </button>
+          </Link>
 
           {/* Missing SEO Alert */}
           <div

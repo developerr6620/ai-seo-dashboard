@@ -1,6 +1,7 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -39,6 +40,7 @@ export const loader = async ({ request }) => {
 
 export default function SeoOptimizer() {
   const loaderData = useLoaderData();
+  const navigate = useNavigate();
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const shopify = useAppBridge();
 
@@ -128,8 +130,8 @@ export default function SeoOptimizer() {
       if (data.success) {
         setFeedbackMessage({ type: "success", text: `🎉 SEO Saved! Title (${seoTitle.length} chars) & Meta (${seoDescription.length} chars) published to Shopify.` });
         if (shopify?.toast) shopify.toast.show("✅ Saved SEO to Shopify catalog!");
-        // Reload to get fresh data from Shopify
-        setTimeout(() => window.location.reload(), 1500);
+        // Navigate to refresh the page and get fresh data
+        setTimeout(() => navigate(0), 1500);
       } else {
         setIsSaving(false);
         setFeedbackMessage({ type: "error", text: `❌ Error: ${data.error || "Failed to update product"}` });

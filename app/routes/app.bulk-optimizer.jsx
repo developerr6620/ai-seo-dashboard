@@ -227,8 +227,11 @@ export default function BulkOptimizer() {
       const data = await resp.json();
 
       if (data.success) {
-        // Reload the page to get fresh data from Shopify
-        window.location.reload();
+        setToastMessage(`🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products to Shopify catalog.`);
+        setSelectedIds(new Set());
+        setProposedUpdates({});
+        // Navigate to refresh the page and get fresh data
+        navigate(0);
       } else {
         alert(`Save failed: ${data.error || "Unknown error"}`);
         setIsBulkSaving(false);
