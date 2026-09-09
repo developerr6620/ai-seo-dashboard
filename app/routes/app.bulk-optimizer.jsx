@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
-import { useState, useMemo } from "react";
-import { useLoaderData, useNavigate, useNavigation } from "react-router";
+import { useState, useMemo, useEffect } from "react";
+import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -14,25 +14,34 @@ import {
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get("page") || "1", 10);
+  const pageParam = url.searchParams.get("page");
+  const cursorParam = url.searchParams.get("cursor");
+  const directionParam = url.searchParams.get("direction"); // "next" | "prev"
+  const page = parseInt(pageParam || "1", 10);
   const perPage = 250;
 
+  // Self-heal: If page > 1 but no cursor is present (e.g. from previous broken session),
+  // redirect cleanly to page 1 while preserving Shopify embedded iframe parameters (host, shop, etc.)
+  if (page > 1 && !cursorParam) {
+    const cleanParams = new URLSearchParams(url.search);
+    cleanParams.delete("page");
+    cleanParams.delete("cursor");
+    cleanParams.delete("direction");
+    const qs = cleanParams.toString();
+    return redirect(`/app/bulk-optimizer${qs ? `?${qs}` : ""}`);
+  }
+
   try {
-    // Get total product count and products in parallel
-    const [countResponse, productsResponse] = await Promise.all([
-      admin.graphql(
-        `#graphql
-        query getProductCount {
-          productsCount {
-            count
-          }
-        }`
-      ),
-      admin.graphql(
-        `#graphql
-        query getProducts($first: Int!) {
-          products(first: $first) {
+    // Select the appropriate GraphQL products query based on pagination direction and cursor
+    let productsGql;
+    let productsVars;
+
+    if (cursorParam && directionParam === "prev") {
+      productsGql = `#graphql
+        query getProductsPrev($last: Int!, $before: String!) {
+          products(last: $last, before: $before) {
             edges {
+              cursor
               node {
                 id
                 title
@@ -49,34 +58,126 @@ export const loader = async ({ request }) => {
                 }
               }
             }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+              startCursor
+              endCursor
+            }
           }
-        }`,
-        { variables: { first: perPage } }
+        }`;
+      productsVars = { last: perPage, before: cursorParam };
+    } else if (cursorParam) {
+      productsGql = `#graphql
+        query getProductsNext($first: Int!, $after: String!) {
+          products(first: $first, after: $after) {
+            edges {
+              cursor
+              node {
+                id
+                title
+                handle
+                description
+                status
+                featuredImage {
+                  url
+                  altText
+                }
+                seo {
+                  title
+                  description
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+              startCursor
+              endCursor
+            }
+          }
+        }`;
+      productsVars = { first: perPage, after: cursorParam };
+    } else {
+      productsGql = `#graphql
+        query getProductsFirst($first: Int!) {
+          products(first: $first) {
+            edges {
+              cursor
+              node {
+                id
+                title
+                handle
+                description
+                status
+                featuredImage {
+                  url
+                  altText
+                }
+                seo {
+                  title
+                  description
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+              startCursor
+              endCursor
+            }
+          }
+        }`;
+      productsVars = { first: perPage };
+    }
+
+    // Run count query and products query in parallel
+    const [countResponse, productsResponse] = await Promise.all([
+      admin.graphql(
+        `#graphql
+        query getProductCount {
+          productsCount {
+            count
+          }
+        }`
       ),
+      admin.graphql(productsGql, { variables: productsVars }),
     ]);
 
     const countData = await countResponse.json();
     const productsData = await productsResponse.json();
 
     const totalCount = countData?.data?.productsCount?.count || 0;
-    const rawProducts = productsData?.data?.products?.edges?.map((edge) => edge.node) || [];
+    const rawEdges = productsData?.data?.products?.edges || [];
+    const pageInfo = productsData?.data?.products?.pageInfo || {};
 
-    const products = rawProducts.map((p) => ({
-      id: String(p.id || ""),
-      title: String(p.title || "Untitled Product"),
-      handle: String(p.handle || "product"),
-      description: String(p.description || ""),
-      imageUrl: p.featuredImage?.url || null,
-      status: String(p.status || "ACTIVE"),
-      seoTitle: String(p.seo?.title || ""),
-      seoDescription: String(p.seo?.description || ""),
-    }));
+    const products = rawEdges.map((edge) => {
+      const p = edge.node;
+      return {
+        id: String(p.id || ""),
+        title: String(p.title || "Untitled Product"),
+        handle: String(p.handle || "product"),
+        description: String(p.description || ""),
+        imageUrl: p.featuredImage?.url || null,
+        status: String(p.status || "ACTIVE"),
+        seoTitle: String(p.seo?.title || ""),
+        seoDescription: String(p.seo?.description || ""),
+      };
+    });
 
-    // Calculate pagination info
-    const totalPages = Math.ceil(totalCount / perPage);
-    const currentPage = Math.min(page, totalPages);
-    const hasNextPage = currentPage < totalPages;
-    const hasPreviousPage = currentPage > 1;
+    // Calculate total pages and ensure currentPage is within bounds
+    const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+    const currentPage = Math.min(Math.max(1, page), totalPages);
+
+    const startCursor = pageInfo.startCursor || rawEdges[0]?.cursor || null;
+    const endCursor = pageInfo.endCursor || rawEdges[rawEdges.length - 1]?.cursor || null;
+
+    const hasNextPage = Boolean(
+      (pageInfo.hasNextPage ?? (currentPage < totalPages)) && currentPage < totalPages
+    );
+    const hasPreviousPage = Boolean(
+      (pageInfo.hasPreviousPage ?? (currentPage > 1)) && currentPage > 1
+    );
 
     return {
       products,
@@ -84,6 +185,8 @@ export const loader = async ({ request }) => {
         currentPage,
         hasNextPage,
         hasPreviousPage,
+        startCursor,
+        endCursor,
         totalCount,
         totalPages,
       },
@@ -96,6 +199,8 @@ export const loader = async ({ request }) => {
         currentPage: 1,
         hasNextPage: false,
         hasPreviousPage: false,
+        startCursor: null,
+        endCursor: null,
         totalCount: 0,
         totalPages: 0,
       },
@@ -107,11 +212,14 @@ export default function BulkOptimizer() {
   const loaderData = useLoaderData();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const [searchParams] = useSearchParams();
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const pagination = loaderData?.pagination || {
     currentPage: 1,
     hasNextPage: false,
     hasPreviousPage: false,
+    startCursor: null,
+    endCursor: null,
     totalCount: 0,
     totalPages: 0,
   };
@@ -120,6 +228,11 @@ export default function BulkOptimizer() {
   const [filter, setFilter] = useState("all"); // "all" | "missing-title" | "missing-desc" | "suboptimal"
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // Reset selected IDs when page changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [pagination.currentPage]);
 
   // AI settings
   const [tone, setTone] = useState("High-Converting");
@@ -290,9 +403,18 @@ export default function BulkOptimizer() {
   };
 
   // Pagination handlers
-  const handlePageChange = (newPage) => {
-    if (newPage < 1 || newPage > pagination.totalPages) return;
-    navigate(`/app/bulk-optimizer?page=${newPage}`);
+  const handlePageChange = (newPage, cursor, direction) => {
+    if (newPage < 1 || newPage > pagination.totalPages || isPageLoading) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("page", String(newPage));
+    if (cursor && newPage > 1) {
+      nextParams.set("cursor", cursor);
+      nextParams.set("direction", direction);
+    } else {
+      nextParams.delete("cursor");
+      nextParams.delete("direction");
+    }
+    navigate(`?${nextParams.toString()}`);
   };
 
   return (
@@ -601,38 +723,44 @@ export default function BulkOptimizer() {
         {/* Pagination Controls */}
         {pagination.totalPages > 1 && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", padding: "12px 16px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e1e3e5" }}>
-            <div style={{ fontSize: "13px", color: "#6d7175" }}>
-              Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalCount} total products)
+            <div style={{ fontSize: "13px", color: "#6d7175", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span>Page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong></span>
+              <span>({pagination.totalCount} total products)</span>
+              {isPageLoading && <span style={{ color: "#008060", fontWeight: "600" }}>• Loading...</span>}
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
               <button
-                onClick={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={!pagination.hasPreviousPage}
+                type="button"
+                onClick={() => handlePageChange(pagination.currentPage - 1, pagination.startCursor, "prev")}
+                disabled={!pagination.hasPreviousPage || isPageLoading}
                 style={{
-                  padding: "6px 12px",
+                  padding: "6px 14px",
                   borderRadius: "6px",
                   border: "1px solid #c9cccf",
-                  background: pagination.hasPreviousPage ? "#ffffff" : "#f1f2f3",
-                  color: pagination.hasPreviousPage ? "#202223" : "#9aa0a6",
+                  background: pagination.hasPreviousPage && !isPageLoading ? "#ffffff" : "#f1f2f3",
+                  color: pagination.hasPreviousPage && !isPageLoading ? "#202223" : "#9aa0a6",
                   fontSize: "13px",
-                  fontWeight: "500",
-                  cursor: pagination.hasPreviousPage ? "pointer" : "not-allowed",
+                  fontWeight: "600",
+                  cursor: pagination.hasPreviousPage && !isPageLoading ? "pointer" : "not-allowed",
+                  boxShadow: pagination.hasPreviousPage && !isPageLoading ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
                 }}
               >
                 ← Previous
               </button>
               <button
-                onClick={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={!pagination.hasNextPage}
+                type="button"
+                onClick={() => handlePageChange(pagination.currentPage + 1, pagination.endCursor, "next")}
+                disabled={!pagination.hasNextPage || isPageLoading}
                 style={{
-                  padding: "6px 12px",
+                  padding: "6px 14px",
                   borderRadius: "6px",
                   border: "1px solid #c9cccf",
-                  background: pagination.hasNextPage ? "#ffffff" : "#f1f2f3",
-                  color: pagination.hasNextPage ? "#202223" : "#9aa0a6",
+                  background: pagination.hasNextPage && !isPageLoading ? "#ffffff" : "#f1f2f3",
+                  color: pagination.hasNextPage && !isPageLoading ? "#202223" : "#9aa0a6",
                   fontSize: "13px",
-                  fontWeight: "500",
-                  cursor: pagination.hasNextPage ? "pointer" : "not-allowed",
+                  fontWeight: "600",
+                  cursor: pagination.hasNextPage && !isPageLoading ? "pointer" : "not-allowed",
+                  boxShadow: pagination.hasNextPage && !isPageLoading ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
                 }}
               >
                 Next →
@@ -818,6 +946,51 @@ export default function BulkOptimizer() {
               </tbody>
             </table>
           </div>
+
+          {/* Bottom Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderTop: "1px solid #e1e3e5", background: "#f9fafb" }}>
+              <div style={{ fontSize: "13px", color: "#6d7175" }}>
+                Showing page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.totalCount} total products)
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(pagination.currentPage - 1, pagination.startCursor, "prev")}
+                  disabled={!pagination.hasPreviousPage || isPageLoading}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid #c9cccf",
+                    background: pagination.hasPreviousPage && !isPageLoading ? "#ffffff" : "#f1f2f3",
+                    color: pagination.hasPreviousPage && !isPageLoading ? "#202223" : "#9aa0a6",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: pagination.hasPreviousPage && !isPageLoading ? "pointer" : "not-allowed",
+                  }}
+                >
+                  ← Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(pagination.currentPage + 1, pagination.endCursor, "next")}
+                  disabled={!pagination.hasNextPage || isPageLoading}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "1px solid #c9cccf",
+                    background: pagination.hasNextPage && !isPageLoading ? "#ffffff" : "#f1f2f3",
+                    color: pagination.hasNextPage && !isPageLoading ? "#202223" : "#9aa0a6",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: pagination.hasNextPage && !isPageLoading ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </s-section>
     </s-page>
