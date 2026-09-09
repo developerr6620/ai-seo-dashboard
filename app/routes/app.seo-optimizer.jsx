@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
 import { useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -10,34 +11,14 @@ import {
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
+import { fetchAllProducts } from "../lib/shopifyHelpers";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
 
   try {
-    const response = await admin.graphql(
-      `#graphql
-      query getProducts {
-        products(first: 250) {
-          edges {
-            node {
-              id
-              title
-              handle
-              description
-              status
-              seo {
-                title
-                description
-              }
-            }
-          }
-        }
-      }`
-    );
-
-    const data = await response.json();
-    const rawProducts = data?.data?.products?.edges?.map((edge) => edge.node) || [];
+    // Fetch ALL products using pagination
+    const rawProducts = await fetchAllProducts(admin);
 
     const products = rawProducts.map((p) => ({
       id: String(p.id || ""),
@@ -58,7 +39,7 @@ export const loader = async ({ request }) => {
 
 export default function SeoOptimizer() {
   const loaderData = useLoaderData();
-  const products = loaderData?.products || [];
+  const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const shopify = useAppBridge();
 
   const [selectedProduct, setSelectedProduct] = useState(products[0] || null);
@@ -97,6 +78,7 @@ export default function SeoOptimizer() {
     if (products.length > 0 && !selectedProduct) {
       selectProduct(products[0]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
 
   const seoAnalysis = useMemo(() => {
@@ -190,13 +172,16 @@ export default function SeoOptimizer() {
                         <div style={{ padding: "12px 16px", color: "#616161", fontSize: "14px" }}>No matching products found.</div>
                       ) : (
                         filteredProducts.map((p) => (
-                          <div key={p.id} onClick={() => selectProduct(p)} style={{ padding: "12px 16px", borderBottom: "1px solid #f1f2f3", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: selectedProduct?.id === p.id ? "#f4f6f8" : "#ffffff" }}
-                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f4f6f8")}
-                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = selectedProduct?.id === p.id ? "#f4f6f8" : "#ffffff")}
+                          <button
+                            key={p.id}
+                            onClick={() => selectProduct(p)}
+                            style={{ padding: "12px 16px", borderBottom: "1px solid #f1f2f3", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: selectedProduct?.id === p.id ? "#f4f6f8" : "#ffffff", width: "100%", textAlign: "left", border: "none" }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f4f6f8"}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedProduct?.id === p.id ? "#f4f6f8" : "#ffffff"}
                           >
                             <span style={{ fontWeight: "600", fontSize: "14px", color: "#202223" }}>{p.title}</span>
                             <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "10px", background: p.status === "ACTIVE" ? "#e3f8e0" : "#f1f2f3", color: p.status === "ACTIVE" ? "#108043" : "#616161" }}>{p.status}</span>
-                          </div>
+                          </button>
                         ))
                       )}
                     </div>
@@ -242,14 +227,18 @@ export default function SeoOptimizer() {
                 <s-stack direction="block" gap="base">
                   <s-text font-weight="bold">🎯 Select an AI Variation to Apply:</s-text>
                   {aiVariations.map((v, i) => (
-                    <div key={i} onClick={() => { setSeoTitle(v.title); setSeoDescription(v.desc); }} style={{ padding: "14px", borderRadius: "8px", border: "1.5px solid #008060", background: "#ffffff", cursor: "pointer", marginBottom: "8px" }}>
+                    <button
+                      key={i}
+                      onClick={() => { setSeoTitle(v.title); setSeoDescription(v.desc); }}
+                      style={{ padding: "14px", borderRadius: "8px", border: "1.5px solid #008060", background: "#ffffff", cursor: "pointer", marginBottom: "8px", width: "100%", textAlign: "left" }}
+                    >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontWeight: "bold", color: "#008060", fontSize: "14px" }}>Option {i + 1}: {v.title}</span>
                         <span style={{ fontSize: "12px", background: "#e3f8e0", color: "#108043", padding: "2px 8px", borderRadius: "10px", fontWeight: "bold" }}>{v.title.length} chars</span>
                       </div>
                       <div style={{ fontSize: "13px", color: "#4a4a4a", marginTop: "6px" }}>{v.desc}</div>
                       <div style={{ marginTop: "4px", fontSize: "12px", color: "#108043", fontWeight: "bold" }}>Meta: {v.desc.length} chars ✓</div>
-                    </div>
+                    </button>
                   ))}
                 </s-stack>
               </s-box>

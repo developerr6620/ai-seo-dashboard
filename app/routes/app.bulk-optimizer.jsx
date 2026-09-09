@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo } from "react";
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -9,38 +10,20 @@ import {
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
+import { fetchPaginatedProducts, getTotalProductCount } from "../lib/shopifyHelpers";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1", 10);
+  const perPage = 250;
 
   try {
-    const response = await admin.graphql(
-      `#graphql
-      query getBulkProducts {
-        products(first: 250) {
-          edges {
-            node {
-              id
-              title
-              handle
-              description
-              status
-              featuredImage {
-                url
-                altText
-              }
-              seo {
-                title
-                description
-              }
-            }
-          }
-        }
-      }`
-    );
+    // Get total product count first
+    const totalCount = await getTotalProductCount(admin);
 
-    const data = await response.json();
-    const rawProducts = data?.data?.products?.edges?.map((edge) => edge.node) || [];
+    // Fetch paginated products
+    const { products: rawProducts, pageInfo } = await fetchPaginatedProducts(admin, page, perPage);
 
     const products = rawProducts.map((p) => ({
       id: String(p.id || ""),
@@ -53,16 +36,39 @@ export const loader = async ({ request }) => {
       seoDescription: String(p.seo?.description || ""),
     }));
 
-    return { products };
+    return {
+      products,
+      pagination: {
+        ...pageInfo,
+        totalCount,
+        totalPages: Math.ceil(totalCount / perPage),
+      },
+    };
   } catch (error) {
     console.error("Bulk optimizer loader error:", error);
-    return { products: [] };
+    return {
+      products: [],
+      pagination: {
+        currentPage: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+        totalCount: 0,
+        totalPages: 0,
+      },
+    };
   }
 };
 
 export default function BulkOptimizer() {
   const loaderData = useLoaderData();
   const [products, setProducts] = useState(loaderData?.products || []);
+  const pagination = loaderData?.pagination || {
+    currentPage: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+    totalCount: 0,
+    totalPages: 0,
+  };
 
   const [filter, setFilter] = useState("all"); // "all" | "missing-title" | "missing-desc" | "suboptimal"
   const [searchQuery, setSearchQuery] = useState("");
@@ -78,6 +84,7 @@ export default function BulkOptimizer() {
   const [proposedUpdates, setProposedUpdates] = useState({}); // { [productId]: { seoTitle, seoDescription } }
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [isLoadingPage, setIsLoadingPage] = useState(false);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -100,17 +107,25 @@ export default function BulkOptimizer() {
     });
   }, [products, filter, searchQuery]);
 
-  // Counts for pills
+  // Counts for pills - use pagination total count for overall stats
   const counts = useMemo(() => {
-    const total = products.length;
-    const missingTitle = products.filter((p) => !p.seoTitle?.trim()).length;
-    const missingDesc = products.filter((p) => !p.seoDescription?.trim()).length;
-    const suboptimal = products.filter(
+    const total = pagination.totalCount || products.length;
+    // For page-level counts, use current products
+    const pageMissingTitle = products.filter((p) => !p.seoTitle?.trim()).length;
+    const pageMissingDesc = products.filter((p) => !p.seoDescription?.trim()).length;
+    const pageSuboptimal = products.filter(
       (p) => !isTitleOk(p.seoTitle) || !isDescOk(p.seoDescription)
     ).length;
-    const optimized = total - suboptimal;
-    return { total, missingTitle, missingDesc, suboptimal, optimized };
-  }, [products]);
+    const pageOptimized = products.length - pageSuboptimal;
+
+    return {
+      total,
+      missingTitle: pageMissingTitle,
+      missingDesc: pageMissingDesc,
+      suboptimal: pageSuboptimal,
+      optimized: pageOptimized,
+    };
+  }, [products, pagination.totalCount]);
 
   // Toggle selection
   const handleToggleSelect = (id) => {
@@ -239,6 +254,25 @@ export default function BulkOptimizer() {
     }
   };
 
+  // Pagination handlers
+  const handlePageChange = async (newPage) => {
+    if (newPage < 1 || newPage > pagination.totalPages || isLoadingPage) return;
+
+    setIsLoadingPage(true);
+    setSelectedIds(new Set());
+    setProposedUpdates({});
+
+    try {
+      // Navigate to the new page - React Router will handle the loader
+      window.location.href = `/app/bulk-optimizer?page=${newPage}`;
+    } catch (error) {
+      console.error("Error loading page:", error);
+      setToastMessage("Error loading page. Please try again.");
+      setTimeout(() => setToastMessage(null), 3000);
+      setIsLoadingPage(false);
+    }
+  };
+
   return (
     <s-page heading="🚀 1-Click Bulk SEO Optimizer">
       {/* Toast */}
@@ -289,7 +323,10 @@ export default function BulkOptimizer() {
                 Catalog Bulk AI Optimizer
               </h2>
               <div style={{ fontSize: "13px", opacity: 0.85 }}>
-                Select multiple products, generate Google-clamped meta tags in seconds, and batch publish.
+                {pagination.totalCount > 0
+                  ? `Showing page ${pagination.currentPage} of ${pagination.totalPages} (${pagination.totalCount} total products)`
+                  : "Select multiple products, generate Google-clamped meta tags in seconds, and batch publish."
+                }
               </div>
             </div>
 
@@ -338,10 +375,11 @@ export default function BulkOptimizer() {
           {/* Tone & Keyword Settings */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", background: "rgba(255,255,255,0.05)", padding: "16px", borderRadius: "10px" }}>
             <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "6px", color: "#cbd5e1" }}>
+              <label htmlFor="brand-tone" style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "6px", color: "#cbd5e1" }}>
                 Brand Tone:
               </label>
               <select
+                id="brand-tone"
                 value={tone}
                 onChange={(e) => setTone(e.target.value)}
                 style={{
@@ -363,10 +401,11 @@ export default function BulkOptimizer() {
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "6px", color: "#cbd5e1" }}>
+              <label htmlFor="target-keywords" style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "6px", color: "#cbd5e1" }}>
                 Target Keywords (Optional):
               </label>
               <input
+                id="target-keywords"
                 type="text"
                 value={globalKeywords}
                 onChange={(e) => setGlobalKeywords(e.target.value)}
@@ -414,7 +453,7 @@ export default function BulkOptimizer() {
           {/* Filter Pills */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {[
-              { id: "all", label: `All (${counts.total})` },
+              { id: "all", label: `All (${products.length} of ${pagination.totalCount})` },
               { id: "missing-title", label: `🚨 Missing Title (${counts.missingTitle})` },
               { id: "missing-desc", label: `📝 Missing Desc (${counts.missingDesc})` },
               { id: "suboptimal", label: `🟡 Suboptimal (${counts.suboptimal})` },
@@ -454,11 +493,60 @@ export default function BulkOptimizer() {
             }}
           />
         </div>
+
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", padding: "12px 16px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e1e3e5" }}>
+            <div style={{ fontSize: "13px", color: "#6d7175" }}>
+              Page {pagination.currentPage} of {pagination.totalPages} ({pagination.totalCount} total products)
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                disabled={!pagination.hasPreviousPage || isLoadingPage}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid #c9cccf",
+                  background: pagination.hasPreviousPage && !isLoadingPage ? "#ffffff" : "#f1f2f3",
+                  color: pagination.hasPreviousPage && !isLoadingPage ? "#202223" : "#9aa0a6",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  cursor: pagination.hasPreviousPage && !isLoadingPage ? "pointer" : "not-allowed",
+                }}
+              >
+                ← Previous
+              </button>
+              <button
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                disabled={!pagination.hasNextPage || isLoadingPage}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid #c9cccf",
+                  background: pagination.hasNextPage && !isLoadingPage ? "#ffffff" : "#f1f2f3",
+                  color: pagination.hasNextPage && !isLoadingPage ? "#202223" : "#9aa0a6",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  cursor: pagination.hasNextPage && !isLoadingPage ? "pointer" : "not-allowed",
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
       </s-section>
 
       {/* Products Table with Side-by-Side Review */}
       <s-section>
-        <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e1e3e5", overflow: "hidden" }}>
+        {isLoadingPage ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "#6d7175" }}>
+            <div style={{ fontSize: "16px", marginBottom: "8px" }}>Loading products...</div>
+            <div style={{ fontSize: "13px" }}>Please wait while we fetch the next page</div>
+          </div>
+        ) : (
+          <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e1e3e5", overflow: "hidden" }}>
           <div style={{ padding: "12px 16px", borderBottom: "1px solid #e1e3e5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <input
@@ -473,7 +561,7 @@ export default function BulkOptimizer() {
               </label>
             </div>
             <span style={{ fontSize: "12px", color: "#6d7175" }}>
-              {selectedIds.size} of {products.length} selected for bulk action
+              {selectedIds.size} of {products.length} (this page) selected for bulk action
             </span>
           </div>
 
@@ -633,6 +721,7 @@ export default function BulkOptimizer() {
             </table>
           </div>
         </div>
+        )}
       </s-section>
     </s-page>
   );

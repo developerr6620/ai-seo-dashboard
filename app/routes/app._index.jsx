@@ -1,16 +1,18 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { isDescOk, isTitleOk } from "../lib/seoCopy";
+import { fetchAllProducts } from "../lib/shopifyHelpers";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
 
   try {
-    // Fetch store info + product stats
-    const response = await admin.graphql(
+    // Fetch store info
+    const shopResponse = await admin.graphql(
       `#graphql
-      query getDashboardData {
+      query getShopData {
         shop {
           name
           myshopifyDomain
@@ -19,24 +21,14 @@ export const loader = async ({ request }) => {
             displayName
           }
         }
-        products(first: 250) {
-          edges {
-            node {
-              id
-              status
-              seo {
-                title
-                description
-              }
-            }
-          }
-        }
       }`
     );
 
-    const data = await response.json();
-    const shop = data?.data?.shop || {};
-    const allProducts = data?.data?.products?.edges?.map((e) => e.node) || [];
+    const shopData = await shopResponse.json();
+    const shop = shopData?.data?.shop || {};
+
+    // Fetch ALL products using pagination for accurate stats
+    const allProducts = await fetchAllProducts(admin);
 
     const totalProducts = allProducts.length;
     const withSeoTitle = allProducts.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
@@ -63,6 +55,7 @@ export const loader = async ({ request }) => {
         missingDesc,
         seoScore: totalProducts > 0 ? Math.round(((withSeoTitle + withSeoDesc) / (totalProducts * 2)) * 100) : 0,
       },
+      allProductsCount: totalProducts,
     };
   } catch (error) {
     console.error("Dashboard loader error:", error);
@@ -73,15 +66,13 @@ export const loader = async ({ request }) => {
         withOptimalTitle: 0, withOptimalDesc: 0,
         missingTitle: 0, missingDesc: 0, seoScore: 0,
       },
+      allProductsCount: 0,
     };
   }
 };
 
 export default function Dashboard() {
-  const { shop, stats } = useLoaderData();
-
-  const scoreColor = stats.seoScore >= 80 ? "#108043" : stats.seoScore >= 50 ? "#b7791f" : "#d9381e";
-  const scoreBg = stats.seoScore >= 80 ? "#e3f8e0" : stats.seoScore >= 50 ? "#fff4e5" : "#fbeae5";
+  const { shop, stats, allProductsCount } = useLoaderData();
 
   return (
     <s-page heading={`👋 Welcome back, ${shop.name}`}>
@@ -111,7 +102,7 @@ export default function Dashboard() {
               🌐 {shop.domain}
             </div>
             <div style={{ fontSize: "13px", opacity: 0.75 }}>
-              📦 {stats.totalProducts} Products in catalog &nbsp;|&nbsp; 🏷️ {shop.plan} Plan
+              📦 {allProductsCount} Products in catalog &nbsp;|&nbsp; 🏷️ {shop.plan} Plan
             </div>
           </div>
 
@@ -322,7 +313,7 @@ export default function Dashboard() {
           }}
         >
           {/* 1-Click Bulk Optimizer */}
-          <div
+          <button
             onClick={() => { window.location.href = "/app/bulk-optimizer"; }}
             style={{
               background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
@@ -334,6 +325,8 @@ export default function Dashboard() {
               border: "1px solid rgba(255,255,255,0.1)",
               position: "relative",
               overflow: "hidden",
+              width: "100%",
+              textAlign: "left",
             }}
           >
             <div style={{ position: "absolute", top: "12px", right: "12px", background: "#10b981", color: "#ffffff", fontSize: "10px", fontWeight: "800", padding: "2px 8px", borderRadius: "10px" }}>
@@ -347,10 +340,10 @@ export default function Dashboard() {
             <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: "#34d399" }}>
               Launch Bulk Tool →
             </div>
-          </div>
+          </button>
 
           {/* Start Single SEO Optimizer */}
-          <div
+          <button
             onClick={() => { window.location.href = "/app/seo-optimizer"; }}
             style={{
               background: "linear-gradient(135deg, #008060, #004c3f)",
@@ -359,6 +352,8 @@ export default function Dashboard() {
               cursor: "pointer",
               color: "#ffffff",
               boxShadow: "0 4px 12px rgba(0,128,96,0.3)",
+              width: "100%",
+              textAlign: "left",
             }}
           >
             <div style={{ fontSize: "28px", marginBottom: "10px" }}>⚡</div>
@@ -369,7 +364,7 @@ export default function Dashboard() {
             <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", opacity: 0.9 }}>
               Open Single Tool →
             </div>
-          </div>
+          </button>
 
           {/* Missing SEO Alert */}
           <div
