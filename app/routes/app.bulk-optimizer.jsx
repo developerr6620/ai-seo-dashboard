@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo } from "react";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -10,7 +10,6 @@ import {
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
-import { fetchPaginatedProducts, getTotalProductCount } from "../lib/shopifyHelpers";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -19,11 +18,48 @@ export const loader = async ({ request }) => {
   const perPage = 250;
 
   try {
-    // Get total product count first
-    const totalCount = await getTotalProductCount(admin);
+    // Get total product count and products in parallel
+    const [countResponse, productsResponse] = await Promise.all([
+      admin.graphql(
+        `#graphql
+        query getProductCount {
+          productsCount {
+            count
+          }
+        }`
+      ),
+      admin.graphql(
+        `#graphql
+        query getProducts($first: Int!) {
+          products(first: $first) {
+            edges {
+              node {
+                id
+                title
+                handle
+                description
+                status
+                featuredImage {
+                  url
+                  altText
+                }
+                seo {
+                  title
+                  description
+                }
+              }
+            }
+          }
+        }`,
+        { variables: { first: perPage } }
+      ),
+    ]);
 
-    // Fetch paginated products
-    const { products: rawProducts, pageInfo } = await fetchPaginatedProducts(admin, page, perPage);
+    const countData = await countResponse.json();
+    const productsData = await productsResponse.json();
+
+    const totalCount = countData?.data?.productsCount?.count || 0;
+    const rawProducts = productsData?.data?.products?.edges?.map((edge) => edge.node) || [];
 
     const products = rawProducts.map((p) => ({
       id: String(p.id || ""),
@@ -36,12 +72,20 @@ export const loader = async ({ request }) => {
       seoDescription: String(p.seo?.description || ""),
     }));
 
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalCount / perPage);
+    const currentPage = Math.min(page, totalPages);
+    const hasNextPage = currentPage < totalPages;
+    const hasPreviousPage = currentPage > 1;
+
     return {
       products,
       pagination: {
-        ...pageInfo,
+        currentPage,
+        hasNextPage,
+        hasPreviousPage,
         totalCount,
-        totalPages: Math.ceil(totalCount / perPage),
+        totalPages,
       },
     };
   } catch (error) {
@@ -62,6 +106,7 @@ export const loader = async ({ request }) => {
 export default function BulkOptimizer() {
   const loaderData = useLoaderData();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const pagination = loaderData?.pagination || {
     currentPage: 1,
@@ -70,6 +115,7 @@ export default function BulkOptimizer() {
     totalCount: 0,
     totalPages: 0,
   };
+  const isPageLoading = navigation.state === "loading";
 
   const [filter, setFilter] = useState("all"); // "all" | "missing-title" | "missing-desc" | "suboptimal"
   const [searchQuery, setSearchQuery] = useState("");
@@ -251,6 +297,13 @@ export default function BulkOptimizer() {
 
   return (
     <s-page heading="🚀 1-Click Bulk SEO Optimizer">
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+
       {/* Toast */}
       {toastMessage && (
         <div
@@ -275,6 +328,43 @@ export default function BulkOptimizer() {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* Page Loading Overlay */}
+      {isPageLoading && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(255, 255, 255, 0.9)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "4px solid #f3f3f3",
+              borderTop: "4px solid #008060",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              marginBottom: "16px",
+            }}
+          />
+          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
+            Loading...
+          </div>
+          <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>
+            Please wait while we fetch your products
+          </div>
         </div>
       )}
 
@@ -312,7 +402,7 @@ export default function BulkOptimizer() {
                 onClick={handleStartBulkGeneration}
                 disabled={isBulkGenerating || selectedIds.size === 0}
                 style={{
-                  background: selectedIds.size > 0 ? "linear-gradient(135deg, #10b981 0%, #059669 100%)" : "#475569",
+                  background: selectedIds.size > 0 && !isBulkGenerating ? "linear-gradient(135deg, #10b981 0%, #059669 100%)" : "#475569",
                   color: "#ffffff",
                   fontWeight: "700",
                   padding: "10px 18px",
@@ -320,10 +410,29 @@ export default function BulkOptimizer() {
                   border: "none",
                   cursor: selectedIds.size > 0 && !isBulkGenerating ? "pointer" : "not-allowed",
                   fontSize: "13px",
-                  boxShadow: selectedIds.size > 0 ? "0 2px 10px rgba(16,185,129,0.35)" : "none",
+                  boxShadow: selectedIds.size > 0 && !isBulkGenerating ? "0 2px 10px rgba(16,185,129,0.35)" : "none",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
                 }}
               >
-                {isBulkGenerating ? "🤖 Generating..." : `⚡ Generate AI SEO (${selectedIds.size} Selected)`}
+                {isBulkGenerating ? (
+                  <>
+                    <div
+                      style={{
+                        width: "16px",
+                        height: "16px",
+                        border: "2px solid #ffffff",
+                        borderTop: "2px solid transparent",
+                        borderRadius: "50%",
+                        animation: "spin 0.8s linear infinite",
+                      }}
+                    />
+                    Generating AI SEO...
+                  </>
+                ) : (
+                  `⚡ Generate AI SEO (${selectedIds.size} Selected)`
+                )}
               </button>
 
               {Object.keys(proposedUpdates).length > 0 && (
@@ -331,7 +440,7 @@ export default function BulkOptimizer() {
                   onClick={handleSaveBulkToShopify}
                   disabled={isBulkSaving}
                   style={{
-                    background: "#0284c7",
+                    background: isBulkSaving ? "#64748b" : "#0284c7",
                     color: "#ffffff",
                     fontWeight: "700",
                     padding: "10px 18px",
@@ -339,10 +448,29 @@ export default function BulkOptimizer() {
                     border: "none",
                     cursor: isBulkSaving ? "not-allowed" : "pointer",
                     fontSize: "13px",
-                    boxShadow: "0 2px 10px rgba(2,132,199,0.35)",
+                    boxShadow: isBulkSaving ? "none" : "0 2px 10px rgba(2,132,199,0.35)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  {isBulkSaving ? "💾 Saving to Shopify..." : "💾 Apply & Save to Shopify"}
+                  {isBulkSaving ? (
+                    <>
+                      <div
+                        style={{
+                          width: "16px",
+                          height: "16px",
+                          border: "2px solid #ffffff",
+                          borderTop: "2px solid transparent",
+                          borderRadius: "50%",
+                          animation: "spin 0.8s linear infinite",
+                        }}
+                      />
+                      Saving to Shopify...
+                    </>
+                  ) : (
+                    "💾 Apply & Save to Shopify"
+                  )}
                 </button>
               )}
             </div>

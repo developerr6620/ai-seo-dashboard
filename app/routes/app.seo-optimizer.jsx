@@ -1,7 +1,7 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -12,14 +12,35 @@ import {
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
-import { fetchAllProducts } from "../lib/shopifyHelpers";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
 
   try {
-    // Fetch ALL products using pagination
-    const rawProducts = await fetchAllProducts(admin);
+    // Only fetch first 250 products for initial load - much faster
+    const response = await admin.graphql(
+      `#graphql
+      query getProducts {
+        products(first: 250) {
+          edges {
+            node {
+              id
+              title
+              handle
+              description
+              status
+              seo {
+                title
+                description
+              }
+            }
+          }
+        }
+      }`
+    );
+
+    const data = await response.json();
+    const rawProducts = data?.data?.products?.edges?.map((edge) => edge.node) || [];
 
     const products = rawProducts.map((p) => ({
       id: String(p.id || ""),
@@ -31,29 +52,33 @@ export const loader = async ({ request }) => {
       seoDescription: String(p.seo?.description || ""),
     }));
 
-    return { products };
+    return { products, hasMore: rawProducts.length === 250 };
   } catch (error) {
     console.error("Error loading products:", error);
-    return { products: [] };
+    return { products: [], hasMore: false };
   }
 };
 
 export default function SeoOptimizer() {
   const loaderData = useLoaderData();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
+  const hasMore = loaderData?.hasMore || false;
   const shopify = useAppBridge();
+  const isPageLoading = navigation.state === "loading";
 
   const [selectedProduct, setSelectedProduct] = useState(products[0] || null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [allProducts] = useState(products);
 
   const filteredProducts = useMemo(() => {
-    if (!searchQuery.trim()) return products;
-    return products.filter((p) =>
+    if (!searchQuery.trim()) return allProducts;
+    return allProducts.filter((p) =>
       p.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [products, searchQuery]);
+  }, [allProducts, searchQuery]);
 
   const [keywords, setKeywords] = useState("");
   const [tone, setTone] = useState("High-Converting");
@@ -82,6 +107,9 @@ export default function SeoOptimizer() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
+
+  // Note: In a future enhancement, you could implement lazy loading for search
+  // For now, we search within the first 250 products
 
   const seoAnalysis = useMemo(() => {
     const titleLen = (seoTitle || "").length;
@@ -149,6 +177,14 @@ export default function SeoOptimizer() {
           Search your store catalog, generate titles under {TITLE_MAX} characters and complete meta descriptions under {DESC_MAX} characters, then publish directly to Shopify.
         </s-paragraph>
 
+        {hasMore && (
+          <s-box padding="base" background="subdued" borderRadius="base" style={{ marginBottom: "16px" }}>
+            <s-text font-size="small" color="subdued">
+              ℹ️ Showing first 250 products. For catalogs with 250+ products, use the Bulk Optimizer for batch processing.
+            </s-text>
+          </s-box>
+        )}
+
         {products.length === 0 ? (
           <s-box padding="base" background="subdued" borderRadius="base">
             <s-text font-weight="bold">No products found in store catalog.</s-text>
@@ -162,7 +198,7 @@ export default function SeoOptimizer() {
                 <div style={{ position: "relative", width: "100%" }}>
                   <input
                     type="text"
-                    placeholder="Type to search all products in store..."
+                    placeholder={`Type to search through ${products.length} products...`}
                     value={searchQuery}
                     onFocus={() => setIsDropdownOpen(true)}
                     onChange={(e) => { setSearchQuery(e.target.value); setIsDropdownOpen(true); }}
@@ -171,7 +207,12 @@ export default function SeoOptimizer() {
                   {isDropdownOpen && (
                     <div style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "260px", overflowY: "auto", backgroundColor: "#ffffff", border: "1px solid #c9cccf", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.15)", zIndex: 999, marginTop: "4px" }}>
                       {filteredProducts.length === 0 ? (
-                        <div style={{ padding: "12px 16px", color: "#616161", fontSize: "14px" }}>No matching products found.</div>
+                        <div style={{ padding: "12px 16px", color: "#616161", fontSize: "14px" }}>
+                          {hasMore && searchQuery.trim().length > 0
+                            ? "No matches in first 250 products. Try Bulk Optimizer for full catalog search."
+                            : "No matching products found."
+                          }
+                        </div>
                       ) : (
                         filteredProducts.map((p) => (
                           <button
@@ -218,7 +259,13 @@ export default function SeoOptimizer() {
                     </div>
                   </s-stack>
                   <s-text-field label="Focus Keywords" value={keywords} onChange={(e) => setKeywords(e.currentTarget.value)} details="Example: eco-friendly, premium quality, top rated"></s-text-field>
-                  <s-button onClick={handleGenerateAI} {...(isGenerating ? { loading: true } : {})}>✨ Generate SEO (title ≤ {TITLE_MAX} / description ≤ {DESC_MAX})</s-button>
+                  <s-button
+                    onClick={handleGenerateAI}
+                    disabled={isGenerating}
+                    {...(isGenerating ? { loading: true } : {})}
+                  >
+                    {isGenerating ? "✨ Generating AI SEO..." : `✨ Generate SEO (title ≤ ${TITLE_MAX} / description ≤ ${DESC_MAX})`}
+                  </s-button>
                 </s-stack>
               </s-box>
             )}
@@ -281,8 +328,13 @@ export default function SeoOptimizer() {
                       {seoAnalysis.descOk ? `✓ Within limit: ${seoAnalysis.descLen} chars (max ${DESC_MAX})` : `⚠️ Over limit: ${seoAnalysis.descLen} chars (must be ${DESC_MAX} or less)`}
                     </div>
                   </div>
-                  <s-button variant="primary" onClick={handleSaveSeo} {...(isSaving ? { loading: true } : {})}>
-                    💾 Save SEO Changes to Shopify Store
+                  <s-button
+                    variant="primary"
+                    onClick={handleSaveSeo}
+                    disabled={isSaving}
+                    {...(isSaving ? { loading: true } : {})}
+                  >
+                    {isSaving ? "💾 Saving to Shopify..." : "💾 Save SEO Changes to Shopify Store"}
                   </s-button>
                 </s-stack>
               </s-stack>
@@ -290,6 +342,49 @@ export default function SeoOptimizer() {
           </s-stack>
         )}
       </s-section>
+
+      {/* Page Loading Overlay */}
+      {isPageLoading && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(255, 255, 255, 0.9)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "4px solid #f3f3f3",
+              borderTop: "4px solid #008060",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              marginBottom: "16px",
+            }}
+          />
+          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
+            Loading...
+          </div>
+          <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>
+            Please wait while we fetch your data
+          </div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
     </s-page>
   );
 }

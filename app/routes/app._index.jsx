@@ -1,18 +1,17 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
-import { useLoaderData, Link } from "react-router";
+import { useLoaderData, Link, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { isDescOk, isTitleOk } from "../lib/seoCopy";
-import { fetchAllProducts } from "../lib/shopifyHelpers";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
 
   try {
-    // Fetch store info
-    const shopResponse = await admin.graphql(
+    // Fetch store info and product counts in a single optimized query
+    const response = await admin.graphql(
       `#graphql
-      query getShopData {
+      query getDashboardData {
         shop {
           name
           myshopifyDomain
@@ -21,22 +20,45 @@ export const loader = async ({ request }) => {
             displayName
           }
         }
+        productsCount {
+          count
+        }
+        products(first: 250) {
+          edges {
+            node {
+              id
+              seo {
+                title
+                description
+              }
+            }
+          }
+        }
       }`
     );
 
-    const shopData = await shopResponse.json();
-    const shop = shopData?.data?.shop || {};
+    const data = await response.json();
+    const shop = data?.data?.shop || {};
+    const totalProducts = data?.data?.productsCount?.count || 0;
+    const products = data?.data?.products?.edges?.map((e) => e.node) || [];
 
-    // Fetch ALL products using pagination for accurate stats
-    const allProducts = await fetchAllProducts(admin);
+    // Calculate stats from sample (first 250 products)
+    const withSeoTitle = products.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
+    const withSeoDesc = products.filter((p) => p.seo?.description && p.seo.description.trim().length > 0).length;
+    const withOptimalTitle = products.filter((p) => isTitleOk(p.seo?.title)).length;
+    const withOptimalDesc = products.filter((p) => isDescOk(p.seo?.description)).length;
 
-    const totalProducts = allProducts.length;
-    const withSeoTitle = allProducts.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
-    const withSeoDesc = allProducts.filter((p) => p.seo?.description && p.seo.description.trim().length > 0).length;
-    const withOptimalTitle = allProducts.filter((p) => isTitleOk(p.seo?.title)).length;
-    const withOptimalDesc = allProducts.filter((p) => isDescOk(p.seo?.description)).length;
-    const missingTitle = totalProducts - withSeoTitle;
-    const missingDesc = totalProducts - withSeoDesc;
+    // For larger catalogs, estimate stats based on sample
+    const sampleSize = products.length;
+    const sampleRatio = sampleSize > 0 ? totalProducts / sampleSize : 1;
+
+    const estimatedWithSeoTitle = totalProducts > 250 ? Math.round(withSeoTitle * sampleRatio) : withSeoTitle;
+    const estimatedWithSeoDesc = totalProducts > 250 ? Math.round(withSeoDesc * sampleRatio) : withSeoDesc;
+    const estimatedWithOptimalTitle = totalProducts > 250 ? Math.round(withOptimalTitle * sampleRatio) : withOptimalTitle;
+    const estimatedWithOptimalDesc = totalProducts > 250 ? Math.round(withOptimalDesc * sampleRatio) : withOptimalDesc;
+
+    const missingTitle = totalProducts - estimatedWithSeoTitle;
+    const missingDesc = totalProducts - estimatedWithSeoDesc;
 
     return {
       shop: {
@@ -47,15 +69,16 @@ export const loader = async ({ request }) => {
       },
       stats: {
         totalProducts,
-        withSeoTitle,
-        withSeoDesc,
-        withOptimalTitle,
-        withOptimalDesc,
+        withSeoTitle: estimatedWithSeoTitle,
+        withSeoDesc: estimatedWithSeoDesc,
+        withOptimalTitle: estimatedWithOptimalTitle,
+        withOptimalDesc: estimatedWithOptimalDesc,
         missingTitle,
         missingDesc,
-        seoScore: totalProducts > 0 ? Math.round(((withSeoTitle + withSeoDesc) / (totalProducts * 2)) * 100) : 0,
+        seoScore: totalProducts > 0 ? Math.round(((estimatedWithSeoTitle + estimatedWithSeoDesc) / (totalProducts * 2)) * 100) : 0,
       },
       allProductsCount: totalProducts,
+      isEstimated: totalProducts > 250,
     };
   } catch (error) {
     console.error("Dashboard loader error:", error);
@@ -67,12 +90,15 @@ export const loader = async ({ request }) => {
         missingTitle: 0, missingDesc: 0, seoScore: 0,
       },
       allProductsCount: 0,
+      isEstimated: false,
     };
   }
 };
 
 export default function Dashboard() {
-  const { shop, stats, allProductsCount } = useLoaderData();
+  const { shop, stats, allProductsCount, isEstimated } = useLoaderData();
+  const navigation = useNavigation();
+  const isPageLoading = navigation.state === "loading";
 
   return (
     <s-page heading={`👋 Welcome back, ${shop.name}`}>
@@ -126,6 +152,11 @@ export default function Dashboard() {
             <div style={{ fontSize: "12px", marginTop: "6px", opacity: 0.75 }}>
               {stats.seoScore >= 80 ? "🟢 Excellent" : stats.seoScore >= 50 ? "🟡 Needs Work" : "🔴 Critical"}
             </div>
+            {isEstimated && (
+              <div style={{ fontSize: "10px", marginTop: "4px", opacity: 0.6, fontStyle: "italic" }}>
+                * Based on sample of 250 products
+              </div>
+            )}
           </div>
         </div>
       </s-section>
@@ -467,6 +498,49 @@ export default function Dashboard() {
           ))}
         </div>
       </s-section>
+
+      {/* Page Loading Overlay */}
+      {isPageLoading && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(255, 255, 255, 0.9)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "4px solid #f3f3f3",
+              borderTop: "4px solid #008060",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              marginBottom: "16px",
+            }}
+          />
+          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
+            Loading Dashboard...
+          </div>
+          <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>
+            Please wait while we analyze your store SEO
+          </div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
     </s-page>
   );
 }
