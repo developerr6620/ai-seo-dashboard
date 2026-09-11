@@ -675,6 +675,64 @@ export default function Dashboard() {
         </div>
       </s-section>
 
+      {/* Storefront & SEO Extension Connection */}
+      <s-section heading="🌐 Storefront & SEO Extension Connection">
+        <div
+          style={{
+            background: "#ffffff",
+            borderRadius: "12px",
+            padding: "24px",
+            border: "1px solid #e1e3e5",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: "#202223" }}>
+                Display Keywords in SEO Chrome Extensions & Live Storefront
+              </div>
+              <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>
+                Shopify themes natively output Title and Meta Description, but require 1 snippet in <code>theme.liquid</code> to output <code>&lt;meta name=&quot;keywords&quot;&gt;</code>.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const snippet = `{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`;
+                navigator.clipboard.writeText(snippet);
+                alert("Copied Liquid snippet to clipboard!");
+              }}
+              style={{
+                background: "#008060",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "8px",
+                padding: "8px 16px",
+                fontSize: "13px",
+                fontWeight: "700",
+                cursor: "pointer",
+              }}
+            >
+              📋 Copy Liquid Snippet
+            </button>
+          </div>
+
+          <div style={{ background: "#0f172a", color: "#38bdf8", padding: "12px 16px", borderRadius: "8px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto", whiteSpace: "pre-wrap", marginBottom: "14px" }}>
+            {`{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`}
+          </div>
+
+          <div style={{ fontSize: "12px", color: "#334155", background: "#f8fafc", padding: "12px 16px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+            <strong>How to connect in 10 seconds:</strong>
+            <ol style={{ margin: "6px 0 0 18px", padding: 0, lineHeight: "1.6" }}>
+              <li>In Shopify Admin, navigate to <strong>Online Store</strong> → <strong>Themes</strong>.</li>
+              <li>Click the <strong>⋯</strong> button on your active theme → <strong>Edit code</strong>.</li>
+              <li>Open <strong>layout/theme.liquid</strong> and locate <code>&lt;meta name=&quot;description&quot; ...&gt;</code> (inside the <code>&lt;head&gt;</code> tag).</li>
+              <li>Paste the snippet directly below it and click <strong>Save</strong>.</li>
+            </ol>
+          </div>
+        </div>
+      </s-section>
+
       {/* How It Works */}
       <s-section heading="How It Works">
         <div

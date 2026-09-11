@@ -18,9 +18,9 @@ description = "Tracks products created by the Shopify app template for developme
   admin = "merchant_read_write"
 
 [product.metafields.seo.keywords]
-type = "list.single_line_text_field"
+type = "multi_line_text_field"
 name = "Target SEO Keywords"
-description = "High-intent search keywords managed by AI SEO Dashboard"
+description = "Comma-separated target search keywords for SEO"
 
   [product.metafields.seo.keywords.access]
   admin = "merchant_read_write"

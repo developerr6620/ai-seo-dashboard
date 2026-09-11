@@ -81,9 +81,10 @@ export const action = async ({ request }) => {
 
           successCount++;
 
-          // 2. Save Target SEO Keywords as Product Metafield if provided
+          // 2. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
           const keywordsList = formatKeywords(item.keywords);
           if (keywordsList.length > 0) {
+            const commaSeparatedKeywords = keywordsList.join(", ");
             try {
               const metaRes = await admin.graphql(
                 `#graphql
@@ -107,8 +108,8 @@ export const action = async ({ request }) => {
                         ownerId: item.productId,
                         namespace: "seo",
                         key: "keywords",
-                        type: "list.single_line_text_field",
-                        value: JSON.stringify(keywordsList),
+                        type: "multi_line_text_field",
+                        value: commaSeparatedKeywords,
                       },
                     ],
                   },
@@ -199,10 +200,11 @@ export const action = async ({ request }) => {
       });
     }
 
-    // 2. Save Target SEO Keywords as Product Metafield if provided
+    // 2. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
     let hasKeywords = false;
     const keywordsList = formatKeywords(keywords);
     if (keywordsList.length > 0) {
+      const commaSeparatedKeywords = keywordsList.join(", ");
       try {
         const metaRes = await admin.graphql(
           `#graphql
@@ -226,8 +228,8 @@ export const action = async ({ request }) => {
                   ownerId: productId,
                   namespace: "seo",
                   key: "keywords",
-                  type: "list.single_line_text_field",
-                  value: JSON.stringify(keywordsList),
+                  type: "multi_line_text_field",
+                  value: commaSeparatedKeywords,
                 },
               ],
             },

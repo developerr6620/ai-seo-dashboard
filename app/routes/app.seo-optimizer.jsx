@@ -239,7 +239,7 @@ export default function SeoOptimizer() {
 
         setFeedbackMessage({
           type: "success",
-          text: `✅ Saved successfully! Title, description, and ${keywordsList.length} keywords updated in Shopify.`,
+          text: `✅ Saved successfully! Title, description, and ${keywordsList.length} comma-separated keywords saved to Shopify multiline metafield.`,
         });
         if (shopify?.toast) shopify.toast.show("✅ Saved SEO & Keywords to Shopify!");
       } else {
@@ -566,7 +566,7 @@ export default function SeoOptimizer() {
                   {/* Keywords summary line */}
                   <div style={{ fontSize: "12px", color: seoAnalysis.hasKw ? "#108043" : "#b7791f", fontWeight: "600" }}>
                     {seoAnalysis.hasKw
-                      ? `✓ ${keywordsList.length} Target Keywords attached (will save as Shopify Metafield)`
+                      ? `✓ ${keywordsList.length} Target Keywords attached (will save as Shopify comma-separated multiline Metafield)`
                       : "⚠️ No target keywords specified (optional, but recommended for better ranking)"}
                   </div>
                 </s-stack>
@@ -578,6 +578,53 @@ export default function SeoOptimizer() {
                 >
                   {isSaving ? "Saving to Shopify..." : "💾 Save SEO & Keywords to Shopify Store"}
                 </s-button>
+              </s-stack>
+            </s-box>
+
+            {/* Step 4: Frontend Storefront Connection */}
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-stack direction="block" gap="base">
+                <s-stack direction="inline" align="space-between" align-items="center">
+                  <s-text font-weight="bold" font-size="medium">🌐 4. Display Keywords in Frontend & SEO Extensions</s-text>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const snippet = `{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`;
+                      navigator.clipboard.writeText(snippet);
+                      if (shopify?.toast) shopify.toast.show("📋 Liquid snippet copied to clipboard!");
+                    }}
+                    style={{
+                      background: "#008060",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                    }}
+                  >
+                    📋 Copy Theme Code
+                  </button>
+                </s-stack>
+
+                <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.5" }}>
+                  Shopify themes natively generate <strong>SEO Title</strong> and <strong>Meta Description</strong>, but require 1 snippet in your theme code so <strong>SEO Chrome extensions</strong> and Google can detect the <code>&lt;meta name=&quot;keywords&quot;&gt;</code> tag on live product pages.
+                </div>
+
+                <div style={{ background: "#0f172a", color: "#38bdf8", padding: "12px 16px", borderRadius: "8px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto", whiteSpace: "pre-wrap" }}>
+                  {`{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`}
+                </div>
+
+                <div style={{ fontSize: "12px", color: "#334155", background: "#f8fafc", padding: "10px 14px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                  <strong>How to connect in 10 seconds:</strong>
+                  <ol style={{ margin: "6px 0 0 18px", padding: 0, lineHeight: "1.6" }}>
+                    <li>In Shopify Admin, go to <strong>Online Store</strong> → <strong>Themes</strong>.</li>
+                    <li>Click the <strong>⋯</strong> button next to your active theme → <strong>Edit code</strong>.</li>
+                    <li>Open <strong>layout/theme.liquid</strong> and find <code>&lt;meta name=&quot;description&quot; ...&gt;</code> (inside the <code>&lt;head&gt;</code> section).</li>
+                    <li>Paste the copied code directly underneath it and click <strong>Save</strong>.</li>
+                  </ol>
+                </div>
               </s-stack>
             </s-box>
 

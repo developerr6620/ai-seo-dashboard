@@ -291,7 +291,7 @@ function computePreliminaryStats(total, sampleProducts = []) {
     withOptimal = sampleProducts.filter((p) => isTitleOk(p.seo?.title)).length;
     withKw = sampleProducts.filter((p) => {
       const val = p.keywordsMetafield?.value;
-      return Boolean(val && val !== "[]" && val !== '""');
+      return Boolean(val && val.trim().length > 0 && val !== "[]" && val !== '""');
     }).length;
   }
 

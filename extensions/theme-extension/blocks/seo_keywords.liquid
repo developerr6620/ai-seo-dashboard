@@ -1,9 +1,11 @@
-{% if product and product.metafields.seo.keywords.value %}
-  {% assign kws = product.metafields.seo.keywords.value %}
-  {% if kws.size > 0 %}
-    <meta name="keywords" content="{{ kws | join: ', ' | escape }}">
-  {% endif %}
-{% endif %}
+{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}
+  {%- assign seo_kw = product.metafields.seo.keywords.value -%}
+  {%- if seo_kw.first -%}
+    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">
+  {%- else -%}
+    <meta name="keywords" content="{{ seo_kw | strip | escape }}">
+  {%- endif -%}
+{%- endif -%}
 
 {% schema %}
 {
