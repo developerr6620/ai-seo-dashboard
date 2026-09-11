@@ -299,12 +299,68 @@ function computePreliminaryStats(total, sampleProducts = []) {
 }
 
 /**
- * Get store audit stats - reads cache, checks bulk operation, or initiates audit
+ * Get store audit stats - always recomputes from live firstBatchProducts data when
+ * available (covers the keywords stale-cache problem), then checks bulk op for full coverage.
  */
 export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firstBatchProducts = []) {
   const total = Number(totalCatalogProducts) || 0;
 
-  // 1. Check if we have cached stats
+  // Always recompute from live data when we have it (prevents stale cache issues)
+  if (firstBatchProducts.length > 0) {
+    const liveStats = computePreliminaryStats(total, firstBatchProducts);
+
+    // If live batch covers ALL products, this is the ground truth — cache it and return
+    if (firstBatchProducts.length >= total && total > 0) {
+      const finalStats = {
+        ...liveStats,
+        bulkOperationId: `live-${Date.now()}`,
+        lastAuditedAt: new Date().toISOString(),
+        status: "COMPLETED",
+      };
+      writeCachedStats(shop, finalStats);
+      return { stats: finalStats, isAuditing: false, lastAuditedAt: finalStats.lastAuditedAt };
+    }
+
+    // Partial batch: use live data for keyword/title/desc coverage ratios extrapolated to total
+    // and update the cache so the dashboard reflects current reality
+    const cached = readCachedStats(shop);
+    if (cached && cached.status === "COMPLETED") {
+      // Merge: use live sample percentages applied to total, but honour stored bulkOperationId
+      const sampleRatio = firstBatchProducts.length / Math.max(total, 1);
+      const liveWithKeywords = firstBatchProducts.filter((p) => {
+        const val = p.keywordsMetafield?.value;
+        return Boolean(val && val.trim().length > 0 && val !== "[]" && val !== '""');
+      }).length;
+      const liveKeywordRate = liveWithKeywords / Math.max(firstBatchProducts.length, 1);
+      // Extrapolate to total (conservative: use live rate * total)
+      const extrapolatedKeywords = Math.round(liveKeywordRate * total);
+
+      // Recompute full stats extrapolating from sample
+      const liveWithTitle = firstBatchProducts.filter((p) => p.seo?.title?.trim()).length;
+      const liveWithDesc = firstBatchProducts.filter((p) => p.seo?.description?.trim()).length;
+      const liveWithOptimal = firstBatchProducts.filter((p) => isTitleOk(p.seo?.title)).length;
+
+      const titleRate = liveWithTitle / Math.max(firstBatchProducts.length, 1);
+      const descRate = liveWithDesc / Math.max(firstBatchProducts.length, 1);
+      const optimalRate = liveWithOptimal / Math.max(firstBatchProducts.length, 1);
+
+      const updatedStats = {
+        ...cached,
+        ...computeMetrics(
+          total,
+          Math.round(titleRate * total),
+          Math.round(descRate * total),
+          Math.round(optimalRate * total),
+          extrapolatedKeywords
+        ),
+        lastAuditedAt: new Date().toISOString(),
+      };
+      writeCachedStats(shop, updatedStats);
+      return { stats: updatedStats, isAuditing: false, lastAuditedAt: updatedStats.lastAuditedAt };
+    }
+  }
+
+  // 1. Check if we have cached stats (no live data available)
   const cached = readCachedStats(shop);
   if (cached && cached.status === "COMPLETED") {
     const stats = {
