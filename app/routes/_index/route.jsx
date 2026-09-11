@@ -71,7 +71,7 @@ export default function LandingPage() {
           justifyContent: "space-between",
           alignItems: "center",
           height: "60px",
-          maxWidth: "1200px",
+          maxWidth: "1280px",
           width: "100%",
           margin: "0 auto",
           boxSizing: "border-box",
@@ -133,7 +133,7 @@ export default function LandingPage() {
       <main
         style={{
           flex: 1,
-          maxWidth: "860px",
+          maxWidth: "1280px",
           margin: "0 auto",
           padding: "48px 24px 64px",
           width: "100%",
