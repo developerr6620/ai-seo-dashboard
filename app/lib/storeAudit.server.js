@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { isTitleOk } from "./seoCopy";
 
-// Persistent JSON cache path (persisted with the SQLite DB in prisma/ or /app/data/)
+// Persistent JSON cache path (persisted with SQLite DB in prisma/ or /app/data/)
 const CACHE_DIR = process.env.NODE_ENV === "production" && fs.existsSync("/app/data")
   ? "/app/data"
   : path.resolve(process.cwd(), "prisma");
@@ -55,21 +55,30 @@ export function writeCachedStats(shop, stats) {
 /**
  * Compute derived metrics given totals and counts
  */
-export function computeMetrics(totalProducts, withSeoTitle, withSeoDesc, withOptimalTitle) {
+export function computeMetrics(
+  totalProducts,
+  withSeoTitle,
+  withSeoDesc,
+  withOptimalTitle,
+  withKeywords = 0
+) {
   const total = Math.max(0, Number(totalProducts) || 0);
   const titles = Math.min(total, Math.max(0, Number(withSeoTitle) || 0));
   const descs = Math.min(total, Math.max(0, Number(withSeoDesc) || 0));
   const optimal = Math.min(total, Math.max(0, Number(withOptimalTitle) || 0));
+  const keywords = Math.min(total, Math.max(0, Number(withKeywords) || 0));
 
   const missingTitle = Math.max(0, total - titles);
   const missingDesc = Math.max(0, total - descs);
+  const missingKeywords = Math.max(0, total - keywords);
 
   const titleCoveragePct = total > 0 ? Math.round((titles / total) * 100) : 0;
   const descCoveragePct = total > 0 ? Math.round((descs / total) * 100) : 0;
   const optimalTitlePct = total > 0 ? Math.round((optimal / total) * 100) : 0;
+  const keywordCoveragePct = total > 0 ? Math.round((keywords / total) * 100) : 0;
 
   const seoScore = total > 0
-    ? Math.round(((titles + descs) / (total * 2)) * 100)
+    ? Math.round(((titles + descs + keywords) / (total * 3)) * 100)
     : 0;
 
   return {
@@ -77,11 +86,14 @@ export function computeMetrics(totalProducts, withSeoTitle, withSeoDesc, withOpt
     withSeoTitle: titles,
     withSeoDesc: descs,
     withOptimalTitle: optimal,
+    withKeywords: keywords,
     missingTitle,
     missingDesc,
+    missingKeywords,
     titleCoveragePct,
     descCoveragePct,
     optimalTitlePct,
+    keywordCoveragePct,
     seoScore,
   };
 }
@@ -123,14 +135,14 @@ export async function checkAndProcessBulkOperation(admin, shop, totalCatalogProd
       // Check if we have already processed this exact bulk operation ID
       const cached = readCachedStats(shop);
       if (cached && cached.bulkOperationId === op.id) {
-        // Adjust for any changes in total products count
         const updated = {
           ...cached,
           ...computeMetrics(
             totalCatalogProducts || cached.totalProducts,
             cached.withSeoTitle,
             cached.withSeoDesc,
-            cached.withOptimalTitle
+            cached.withOptimalTitle,
+            cached.withKeywords || 0
           ),
         };
         return { status: "COMPLETED", op, stats: updated };
@@ -150,6 +162,7 @@ export async function checkAndProcessBulkOperation(admin, shop, totalCatalogProd
       let withTitle = 0;
       let withDesc = 0;
       let withOptimal = 0;
+      let withKw = 0;
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -163,17 +176,23 @@ export async function checkAndProcessBulkOperation(admin, shop, totalCatalogProd
           const hasTitle = Boolean(item.seo?.title && item.seo.title.trim().length > 0);
           const hasDesc = Boolean(item.seo?.description && item.seo.description.trim().length > 0);
           const isOptimal = isTitleOk(item.seo?.title);
+          const hasKeywords = Boolean(
+            item.keywordsMetafield?.value &&
+            item.keywordsMetafield.value !== "[]" &&
+            item.keywordsMetafield.value !== '""'
+          );
 
           if (hasTitle) withTitle++;
           if (hasDesc) withDesc++;
           if (isOptimal) withOptimal++;
+          if (hasKeywords) withKw++;
         } catch (e) {
           // ignore malformed lines
         }
       }
 
       const total = totalCatalogProducts || count || 1;
-      const metrics = computeMetrics(total, withTitle, withDesc, withOptimal);
+      const metrics = computeMetrics(total, withTitle, withDesc, withOptimal, withKw);
 
       const stats = {
         ...metrics,
@@ -225,6 +244,9 @@ export async function triggerBulkAudit(admin, shop) {
               title
               description
             }
+            keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+              value
+            }
           }
         }
       }
@@ -254,6 +276,29 @@ export async function triggerBulkAudit(admin, shop) {
 }
 
 /**
+ * Helper to compute initial preliminary stats while bulk operation is scanning
+ */
+function computePreliminaryStats(total, sampleProducts = []) {
+  const sampleCount = sampleProducts.length;
+  let withTitle = 0;
+  let withDesc = 0;
+  let withOptimal = 0;
+  let withKw = 0;
+
+  if (sampleCount > 0) {
+    withTitle = sampleProducts.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
+    withDesc = sampleProducts.filter((p) => p.seo?.description && p.seo.description.trim().length > 0).length;
+    withOptimal = sampleProducts.filter((p) => isTitleOk(p.seo?.title)).length;
+    withKw = sampleProducts.filter((p) => {
+      const val = p.keywordsMetafield?.value;
+      return Boolean(val && val !== "[]" && val !== '""');
+    }).length;
+  }
+
+  return computeMetrics(total, withTitle, withDesc, withOptimal, withKw);
+}
+
+/**
  * Get store audit stats - reads cache, checks bulk operation, or initiates audit
  */
 export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firstBatchProducts = []) {
@@ -262,14 +307,14 @@ export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firs
   // 1. Check if we have cached stats
   const cached = readCachedStats(shop);
   if (cached && cached.status === "COMPLETED") {
-    // If total products count changed in the store, recalculate metrics dynamically
     const stats = {
       ...cached,
       ...computeMetrics(
         total > 0 ? total : cached.totalProducts,
         cached.withSeoTitle,
         cached.withSeoDesc,
-        cached.withOptimalTitle
+        cached.withOptimalTitle,
+        cached.withKeywords || 0
       ),
     };
     return {
@@ -290,8 +335,6 @@ export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firs
   }
 
   if (bulkResult.status === "RUNNING") {
-    // Audit is currently executing on Shopify cluster
-    // Provide best available preliminary data
     const preliminary = computePreliminaryStats(total, firstBatchProducts);
     return {
       stats: preliminary,
@@ -300,7 +343,7 @@ export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firs
     };
   }
 
-  // 3. No audit cached and none running: trigger one in the background
+  // 3. Trigger full audit
   console.log(`[StoreAudit] Initiating full catalog audit for ${shop}...`);
   await triggerBulkAudit(admin, shop);
 
@@ -313,37 +356,23 @@ export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firs
 }
 
 /**
- * Helper to compute initial preliminary stats while bulk operation is scanning
- */
-function computePreliminaryStats(total, sampleProducts = []) {
-  const sampleCount = sampleProducts.length;
-  let withTitle = 0;
-  let withDesc = 0;
-  let withOptimal = 0;
-
-  if (sampleCount > 0) {
-    withTitle = sampleProducts.filter((p) => p.seo?.title && p.seo.title.trim().length > 0).length;
-    withDesc = sampleProducts.filter((p) => p.seo?.description && p.seo.description.trim().length > 0).length;
-    withOptimal = sampleProducts.filter((p) => isTitleOk(p.seo?.title)).length;
-  }
-
-  return computeMetrics(total, withTitle, withDesc, withOptimal);
-}
-
-/**
  * Update cached stats when an SEO change is saved via Single or Bulk Optimizer
  */
-export function updateAuditStatsOnSave(shop, { addedTitles = 0, addedDescs = 0, addedOptimal = 0 }) {
+export function updateAuditStatsOnSave(
+  shop,
+  { addedTitles = 0, addedDescs = 0, addedOptimal = 0, addedKeywords = 0 }
+) {
   const cached = readCachedStats(shop);
   if (!cached) return;
 
   const newTitles = Math.min(cached.totalProducts, cached.withSeoTitle + addedTitles);
   const newDescs = Math.min(cached.totalProducts, cached.withSeoDesc + addedDescs);
   const newOptimal = Math.min(cached.totalProducts, cached.withOptimalTitle + addedOptimal);
+  const newKeywords = Math.min(cached.totalProducts, (cached.withKeywords || 0) + addedKeywords);
 
   const updated = {
     ...cached,
-    ...computeMetrics(cached.totalProducts, newTitles, newDescs, newOptimal),
+    ...computeMetrics(cached.totalProducts, newTitles, newDescs, newOptimal, newKeywords),
     lastAuditedAt: new Date().toISOString(),
   };
 

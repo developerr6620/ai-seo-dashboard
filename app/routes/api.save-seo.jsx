@@ -2,10 +2,19 @@ import { authenticate } from "../shopify.server";
 import { enforceSeoLimits } from "../lib/seoCopy";
 import { updateAuditStatsOnSave } from "../lib/storeAudit.server";
 
+function formatKeywords(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map((k) => String(k).trim()).filter(Boolean);
+  return String(raw)
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session?.shop;
-  
+
   try {
     const data = await request.json();
 
@@ -13,6 +22,7 @@ export const action = async ({ request }) => {
     if (Array.isArray(data.items)) {
       const items = data.items;
       let successCount = 0;
+      let keywordsUpdatedCount = 0;
       const errors = [];
 
       for (const item of items) {
@@ -23,6 +33,7 @@ export const action = async ({ request }) => {
         });
 
         try {
+          // 1. Update product SEO title & description
           const response = await admin.graphql(
             `#graphql
             mutation updateProductSeo($input: ProductInput!) {
@@ -61,8 +72,52 @@ export const action = async ({ request }) => {
               productId: item.productId,
               error: userErrors.map((e) => e.message).join(", "),
             });
-          } else {
-            successCount++;
+            continue;
+          }
+
+          successCount++;
+
+          // 2. Save Target SEO Keywords as Product Metafield if provided
+          const keywordsList = formatKeywords(item.keywords);
+          if (keywordsList.length > 0) {
+            try {
+              const metaRes = await admin.graphql(
+                `#graphql
+                mutation saveProductKeywords($metafields: [MetafieldsSetInput!]!) {
+                  metafieldsSet(metafields: $metafields) {
+                    metafields {
+                      id
+                      key
+                      value
+                    }
+                    userErrors {
+                      field
+                      message
+                    }
+                  }
+                }`,
+                {
+                  variables: {
+                    metafields: [
+                      {
+                        ownerId: item.productId,
+                        namespace: "seo",
+                        key: "keywords",
+                        type: "list.single_line_text_field",
+                        value: JSON.stringify(keywordsList),
+                      },
+                    ],
+                  },
+                }
+              );
+              const metaJson = await metaRes.json();
+              const metaErrors = metaJson?.data?.metafieldsSet?.userErrors || [];
+              if (metaErrors.length === 0) {
+                keywordsUpdatedCount++;
+              }
+            } catch (metaErr) {
+              console.warn(`Could not save keywords metafield for ${item.productId}:`, metaErr.message);
+            }
           }
         } catch (e) {
           errors.push({
@@ -77,18 +132,20 @@ export const action = async ({ request }) => {
           addedTitles: successCount,
           addedDescs: successCount,
           addedOptimal: successCount,
+          addedKeywords: keywordsUpdatedCount,
         });
       }
 
       return Response.json({
         success: true,
         updatedCount: successCount,
+        keywordsCount: keywordsUpdatedCount,
         errors,
       });
     }
 
     // Single product update
-    const { productId, seoTitle, seoDescription } = data;
+    const { productId, seoTitle, seoDescription, keywords } = data;
 
     if (!productId || !seoTitle) {
       return Response.json({ success: false, error: "Missing required fields" }, { status: 400 });
@@ -96,6 +153,7 @@ export const action = async ({ request }) => {
 
     const limited = enforceSeoLimits({ title: seoTitle, description: seoDescription });
 
+    // 1. Update product SEO title & description
     const response = await admin.graphql(
       `#graphql
       mutation updateProductSeo($input: ProductInput!) {
@@ -137,17 +195,63 @@ export const action = async ({ request }) => {
       });
     }
 
+    // 2. Save Target SEO Keywords as Product Metafield if provided
+    let hasKeywords = false;
+    const keywordsList = formatKeywords(keywords);
+    if (keywordsList.length > 0) {
+      try {
+        const metaRes = await admin.graphql(
+          `#graphql
+          mutation saveProductKeywords($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              metafields {
+                id
+                key
+                value
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }`,
+          {
+            variables: {
+              metafields: [
+                {
+                  ownerId: productId,
+                  namespace: "seo",
+                  key: "keywords",
+                  type: "list.single_line_text_field",
+                  value: JSON.stringify(keywordsList),
+                },
+              ],
+            },
+          }
+        );
+        const metaJson = await metaRes.json();
+        const metaErrors = metaJson?.data?.metafieldsSet?.userErrors || [];
+        if (metaErrors.length === 0) {
+          hasKeywords = true;
+        }
+      } catch (metaErr) {
+        console.warn(`Could not save keywords metafield for ${productId}:`, metaErr.message);
+      }
+    }
+
     if (shop) {
       updateAuditStatsOnSave(shop, {
         addedTitles: 1,
         addedDescs: seoDescription ? 1 : 0,
         addedOptimal: 1,
+        addedKeywords: hasKeywords ? 1 : 0,
       });
     }
 
     return Response.json({
       success: true,
       product: responseJson?.data?.productUpdate?.product,
+      keywordsSaved: hasKeywords ? keywordsList : null,
     });
   } catch (err) {
     console.error("API update error:", err);

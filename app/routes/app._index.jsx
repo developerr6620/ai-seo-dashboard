@@ -371,6 +371,33 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Target Keywords */}
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "12px",
+              padding: "20px",
+              border: "1px solid #e1e3e5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: "32px", marginBottom: "15px" }}>🏷️</div>
+            <div style={{ fontSize: "32px", fontWeight: "800", color: "#0284c7" }}>
+              {(stats.withKeywords || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: "13px", color: "#616161", marginTop: "10px" }}>Have Target Keywords</div>
+            {(stats.missingKeywords || 0) > 0 ? (
+              <div style={{ fontSize: "11px", color: "#d9381e", marginTop: "4px", fontWeight: "600" }}>
+                ⚠️ {(stats.missingKeywords || 0).toLocaleString()} missing (from {totalCatalog.toLocaleString()})
+              </div>
+            ) : (
+              <div style={{ fontSize: "11px", color: "#108043", marginTop: "4px", fontWeight: "600" }}>
+                ✓ All {totalCatalog.toLocaleString()} products have keywords
+              </div>
+            )}
+          </div>
+
           {/* Optimal Length */}
           <div
             style={{
@@ -483,10 +510,34 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Target Keywords Coverage */}
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+              <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>🎯 Target Keywords Coverage</span>
+              <span style={{ fontSize: "14px", fontWeight: "700", color: "#0284c7" }}>
+                {stats.keywordCoveragePct || 0}%
+              </span>
+            </div>
+            <div style={{ background: "#f1f2f3", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
+              <div
+                style={{
+                  background: "#0284c7",
+                  height: "100%",
+                  borderRadius: "8px",
+                  width: `${stats.keywordCoveragePct || 0}%`,
+                  transition: "width 0.6s ease",
+                }}
+              />
+            </div>
+            <div style={{ fontSize: "12px", color: "#6d7175", marginTop: "4px" }}>
+              {(stats.withKeywords || 0).toLocaleString()} of {totalCatalog.toLocaleString()} products have target keywords
+            </div>
+          </div>
+
           {/* Optimal Title Length Coverage */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-              <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>🎯 Title Within Limit (≤ 50 chars)</span>
+              <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>📏 Title Within Limit (≤ 50 chars)</span>
               <span style={{ fontSize: "14px", fontWeight: "700", color: "#108043" }}>
                 {stats.optimalTitlePct}%
               </span>

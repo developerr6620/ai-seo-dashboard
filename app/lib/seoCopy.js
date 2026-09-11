@@ -211,10 +211,120 @@ export function generateSeoDescription({
   return fitComplete(`Shop ${name} today.`, DESC_MAX, { asSentence: true });
 }
 
+const STOP_WORDS = new Set([
+  "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
+  "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being",
+  "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't",
+  "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during",
+  "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't",
+  "have", "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here",
+  "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i",
+  "i'd", "i'll", "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's",
+  "its", "itself", "let's", "me", "more", "most", "mustn't", "my", "myself",
+  "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought",
+  "our", "ours", "ourselves", "out", "over", "own", "same", "shan't", "she",
+  "she'd", "she'll", "she's", "should", "shouldn't", "so", "some", "such", "than",
+  "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there",
+  "there's", "these", "they", "they'd", "they'll", "they're", "they've", "this",
+  "those", "through", "to", "too", "under", "until", "up", "very", "was", "wasn't",
+  "we", "we'd", "we'll", "we're", "we've", "were", "weren't", "what", "what's",
+  "when", "when's", "where", "where's", "which", "while", "who", "who's", "whom",
+  "why", "why's", "with", "won't", "would", "wouldn't", "you", "you'd", "you'll",
+  "you're", "you've", "your", "yours", "yourself", "yourselves", "item", "product"
+]);
+
+/**
+ * Intelligent AI Keyword Extractor
+ * Derives 5-8 high-intent search keywords from product data
+ */
+export function extractKeywords({
+  productTitle = "",
+  productDescription = "",
+  vendor = "",
+  productType = "",
+} = {}) {
+  const cleanTitle = normalizeSpace(productTitle);
+  const cleanDesc = normalizeSpace(productDescription);
+  const keywordsSet = new Set();
+
+  if (cleanTitle) {
+    // 1. Exact product title (lowercased)
+    keywordsSet.add(cleanTitle.toLowerCase());
+
+    // 2. Meaningful words from title (filtering stop words)
+    const titleWords = cleanTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+
+    // 2-word bigrams from title
+    for (let i = 0; i < titleWords.length - 1; i++) {
+      keywordsSet.add(`${titleWords[i]} ${titleWords[i + 1]}`);
+    }
+
+    // 3-word trigrams from title if available
+    if (titleWords.length >= 3) {
+      keywordsSet.add(`${titleWords[0]} ${titleWords[1]} ${titleWords[2]}`);
+    }
+
+    // Individual significant product nouns/adjectives
+    titleWords.forEach((w) => {
+      if (w.length >= 4) keywordsSet.add(w);
+    });
+  }
+
+  // 3. Product type and vendor associations
+  if (productType && productType.length > 2) {
+    keywordsSet.add(productType.toLowerCase());
+    if (cleanTitle) {
+      keywordsSet.add(`${cleanTitle.toLowerCase()} ${productType.toLowerCase()}`.slice(0, 40));
+    }
+  }
+
+  if (vendor && vendor.length > 2 && !cleanTitle.toLowerCase().includes(vendor.toLowerCase())) {
+    keywordsSet.add(`${vendor.toLowerCase()} ${cleanTitle.toLowerCase()}`.slice(0, 45));
+  }
+
+  // 4. Feature and benefit keywords from description
+  if (cleanDesc) {
+    const descWords = cleanDesc
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+
+    // Key phrases from description
+    for (let i = 0; i < Math.min(descWords.length - 1, 8); i += 2) {
+      const phrase = `${descWords[i]} ${descWords[i + 1]}`;
+      if (phrase.length <= 25) {
+        keywordsSet.add(phrase);
+      }
+    }
+  }
+
+  // Filter out single character, too long, or numeric-only phrases
+  const filtered = Array.from(keywordsSet)
+    .map((k) => k.trim())
+    .filter((k) => k.length >= 3 && k.length <= 40 && !/^\d+$/.test(k));
+
+  // Return top 5 to 8 unique high-intent keywords
+  return filtered.slice(0, 8);
+}
+
 export function generateSeoCopy(options = {}) {
+  let { keywords, keyword } = options;
+  let parsedKeywords = keywordList(keyword, keywords);
+
+  // Auto-extract keywords if none were provided
+  if (parsedKeywords.length === 0 && options.productTitle) {
+    parsedKeywords = extractKeywords(options);
+  }
+
   return {
-    title: generateSeoTitle(options),
-    description: generateSeoDescription(options),
+    title: generateSeoTitle({ ...options, keywords: parsedKeywords }),
+    description: generateSeoDescription({ ...options, keywords: parsedKeywords }),
+    keywords: parsedKeywords,
   };
 }
 
@@ -237,3 +347,4 @@ export function enforceSeoLimits({ title, description }) {
     description: fitComplete(description, DESC_MAX, { asSentence: true }),
   };
 }
+

@@ -1,0 +1,14 @@
+{% if product and product.metafields.seo.keywords.value %}
+  {% assign kws = product.metafields.seo.keywords.value %}
+  {% if kws.size > 0 %}
+    <meta name="keywords" content="{{ kws | join: ', ' | escape }}">
+  {% endif %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "SEO Keywords Tag",
+  "target": "head",
+  "settings": []
+}
+{% endschema %}

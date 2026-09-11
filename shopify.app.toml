@@ -17,6 +17,15 @@ description = "Tracks products created by the Shopify app template for developme
   [product.metafields.app.demo_info.access]
   admin = "merchant_read_write"
 
+[product.metafields.seo.keywords]
+type = "list.single_line_text_field"
+name = "Target SEO Keywords"
+description = "High-intent search keywords managed by AI SEO Dashboard"
+
+  [product.metafields.seo.keywords.access]
+  admin = "merchant_read_write"
+  storefront = "public_read"
+
 [metaobjects.app.example]
 name = "Example"
 description = "An example metaobject definition created by this template"

@@ -11,6 +11,18 @@ import {
   isTitleOk,
 } from "../lib/seoCopy";
 
+function parseMetafieldKeywords(rawVal) {
+  if (!rawVal) return [];
+  try {
+    const parsed = JSON.parse(rawVal);
+    if (Array.isArray(parsed)) return parsed.map((k) => String(k).trim()).filter(Boolean);
+    if (typeof parsed === "string") return parsed.split(",").map((k) => k.trim()).filter(Boolean);
+  } catch (e) {
+    return String(rawVal).split(",").map((k) => k.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   const url = new URL(request.url);
@@ -56,6 +68,9 @@ export const loader = async ({ request }) => {
                   title
                   description
                 }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
             pageInfo {
@@ -87,6 +102,9 @@ export const loader = async ({ request }) => {
                   title
                   description
                 }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
             pageInfo {
@@ -117,6 +135,9 @@ export const loader = async ({ request }) => {
                 seo {
                   title
                   description
+                }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
                 }
               }
             }
@@ -162,6 +183,7 @@ export const loader = async ({ request }) => {
         status: String(p.status || "ACTIVE"),
         seoTitle: String(p.seo?.title || ""),
         seoDescription: String(p.seo?.description || ""),
+        keywords: parseMetafieldKeywords(p.keywordsMetafield?.value),
       };
     });
 
@@ -261,6 +283,7 @@ export default function BulkOptimizer() {
 
       if (filter === "missing-title") return !hasTitle;
       if (filter === "missing-desc") return !hasDesc;
+      if (filter === "missing-keywords") return !p.keywords || p.keywords.length === 0;
       if (filter === "suboptimal") return !isTitleOptimal || !isDescOptimal;
       if (filter === "optimized") return isTitleOptimal && isDescOptimal;
       return true;
@@ -273,6 +296,7 @@ export default function BulkOptimizer() {
     // For page-level counts, use current products
     const pageMissingTitle = products.filter((p) => !p.seoTitle?.trim()).length;
     const pageMissingDesc = products.filter((p) => !p.seoDescription?.trim()).length;
+    const pageMissingKeywords = products.filter((p) => !p.keywords || p.keywords.length === 0).length;
     const pageSuboptimal = products.filter(
       (p) => !isTitleOk(p.seoTitle) || !isDescOk(p.seoDescription)
     ).length;
@@ -282,6 +306,7 @@ export default function BulkOptimizer() {
       total,
       missingTitle: pageMissingTitle,
       missingDesc: pageMissingDesc,
+      missingKeywords: pageMissingKeywords,
       suboptimal: pageSuboptimal,
       optimized: pageOptimized,
     };
@@ -324,13 +349,14 @@ export default function BulkOptimizer() {
       const copy = generateSeoCopy({
         productTitle: p.title,
         productDescription: p.description,
-        keywords: kwList,
+        keywords: kwList.length > 0 ? kwList : p.keywords,
         tone,
       });
 
       newProposals[p.id] = {
         seoTitle: copy.title,
         seoDescription: copy.description,
+        keywords: copy.keywords || kwList || p.keywords || [],
         isReviewed: true,
       };
 
@@ -368,6 +394,7 @@ export default function BulkOptimizer() {
           productId,
           seoTitle: proposal.seoTitle,
           seoDescription: proposal.seoDescription || "",
+          keywords: proposal.keywords || [],
         });
       }
     }
@@ -684,6 +711,7 @@ export default function BulkOptimizer() {
               { id: "all", label: `All (${products.length} of ${pagination.totalCount})` },
               { id: "missing-title", label: `🚨 Missing Title (${counts.missingTitle})` },
               { id: "missing-desc", label: `📝 Missing Desc (${counts.missingDesc})` },
+              { id: "missing-keywords", label: `🏷️ Missing Keywords (${counts.missingKeywords})` },
               { id: "suboptimal", label: `🟡 Suboptimal (${counts.suboptimal})` },
               { id: "optimized", label: `✅ Optimized (${counts.optimized})` },
             ].map((tab) => (
@@ -834,10 +862,40 @@ export default function BulkOptimizer() {
                         />
                       </td>
 
-                      {/* Product Info */}
+                      {/* Product Info & Keywords */}
                       <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
                         <div style={{ fontWeight: "700", color: "#202223", marginBottom: "4px" }}>{p.title}</div>
                         <div style={{ fontSize: "11px", color: "#6d7175" }}>Handle: {p.handle}</div>
+
+                        {/* Display Keywords Tags */}
+                        <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                          {(proposal?.keywords || p.keywords)?.slice(0, 4).map((kw) => (
+                            <span
+                              key={kw}
+                              style={{
+                                fontSize: "10px",
+                                padding: "2px 6px",
+                                borderRadius: "10px",
+                                background: proposal ? "#e0f2fe" : "#f1f5f9",
+                                color: proposal ? "#0369a1" : "#475569",
+                                border: `1px solid ${proposal ? "#bae6fd" : "#cbd5e1"}`,
+                              }}
+                            >
+                              🏷️ {kw}
+                            </span>
+                          ))}
+                          {((proposal?.keywords || p.keywords)?.length > 4) && (
+                            <span style={{ fontSize: "10px", color: "#64748b" }}>
+                              +{(proposal?.keywords || p.keywords).length - 4} more
+                            </span>
+                          )}
+                          {!(proposal?.keywords?.length || p.keywords?.length) && (
+                            <span style={{ fontSize: "10px", color: "#94a3b8", fontStyle: "italic" }}>
+                              No keywords
+                            </span>
+                          )}
+                        </div>
+
                         {proposal && (
                           <span
                             style={{
@@ -845,8 +903,8 @@ export default function BulkOptimizer() {
                               marginTop: "6px",
                               padding: "2px 6px",
                               borderRadius: "4px",
-                              background: "#e0f2fe",
-                              color: "#0369a1",
+                              background: "#dcfce7",
+                              color: "#15803d",
                               fontSize: "10px",
                               fontWeight: "700",
                             }}

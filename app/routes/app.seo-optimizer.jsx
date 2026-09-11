@@ -1,6 +1,5 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
-/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useLoaderData, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -9,15 +8,27 @@ import {
   DESC_MAX,
   TITLE_MAX,
   generateSeoCopy,
+  extractKeywords,
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
+
+function parseMetafieldKeywords(rawVal) {
+  if (!rawVal) return [];
+  try {
+    const parsed = JSON.parse(rawVal);
+    if (Array.isArray(parsed)) return parsed.map((k) => String(k).trim()).filter(Boolean);
+    if (typeof parsed === "string") return parsed.split(",").map((k) => k.trim()).filter(Boolean);
+  } catch (e) {
+    return String(rawVal).split(",").map((k) => k.trim()).filter(Boolean);
+  }
+  return [];
+}
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
 
   try {
-    // Only fetch first 250 products for initial load - much faster
     const response = await admin.graphql(
       `#graphql
       query getProducts {
@@ -32,6 +43,9 @@ export const loader = async ({ request }) => {
               seo {
                 title
                 description
+              }
+              keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                value
               }
             }
           }
@@ -50,6 +64,7 @@ export const loader = async ({ request }) => {
       status: String(p.status || "ACTIVE"),
       seoTitle: String(p.seo?.title || p.title || ""),
       seoDescription: String(p.seo?.description || ""),
+      keywords: parseMetafieldKeywords(p.keywordsMetafield?.value),
     }));
 
     return { products, hasMore: rawProducts.length === 250 };
@@ -83,7 +98,8 @@ export default function SeoOptimizer() {
     );
   }, [allProducts, searchQuery]);
 
-  const [keywords, setKeywords] = useState("");
+  const [keywordsList, setKeywordsList] = useState(selectedProduct?.keywords || []);
+  const [newKeywordInput, setNewKeywordInput] = useState("");
   const [tone, setTone] = useState("High-Converting");
 
   const [seoTitle, setSeoTitle] = useState(selectedProduct?.seoTitle || "");
@@ -97,6 +113,7 @@ export default function SeoOptimizer() {
     setSearchQuery(prod.title);
     setSeoTitle(prod.seoTitle);
     setSeoDescription(prod.seoDescription);
+    setKeywordsList(prod.keywords || []);
     setIsDropdownOpen(false);
     setFeedbackMessage(null);
   };
@@ -108,30 +125,70 @@ export default function SeoOptimizer() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
 
-  // Note: In a future enhancement, you could implement lazy loading for search
-  // For now, we search within the first 250 products
-
   const seoAnalysis = useMemo(() => {
     const titleLen = (seoTitle || "").length;
     const descLen = (seoDescription || "").length;
     const titleOk = isTitleOk(seoTitle);
     const descOk = isDescOk(seoDescription);
+    const hasKw = keywordsList.length > 0;
+
     let score = 0;
-    if (titleOk) score += 50;
-    else if (titleLen > 0 && titleLen <= TITLE_MAX + 10) score += 25;
-    if (descOk) score += 50;
-    else if (descLen > 0 && descLen <= DESC_MAX + 20) score += 25;
-    return { score, titleOk, descOk, titleLen, descLen };
-  }, [seoTitle, seoDescription]);
+    if (titleOk) score += 40;
+    else if (titleLen > 0 && titleLen <= TITLE_MAX + 10) score += 20;
+
+    if (descOk) score += 40;
+    else if (descLen > 0 && descLen <= DESC_MAX + 20) score += 20;
+
+    if (hasKw) score += 20;
+
+    return { score, titleOk, descOk, titleLen, descLen, hasKw };
+  }, [seoTitle, seoDescription, keywordsList]);
+
+  // Handle adding a keyword tag
+  const handleAddKeyword = useCallback(() => {
+    const trimmed = newKeywordInput.trim().toLowerCase();
+    if (!trimmed) return;
+    if (!keywordsList.includes(trimmed)) {
+      setKeywordsList((prev) => [...prev, trimmed]);
+    }
+    setNewKeywordInput("");
+  }, [newKeywordInput, keywordsList]);
+
+  // Handle removing a keyword tag
+  const handleRemoveKeyword = useCallback((kwToRemove) => {
+    setKeywordsList((prev) => prev.filter((k) => k !== kwToRemove));
+  }, []);
+
+  // Handle AI Keyword Extraction
+  const handleAutoExtractKeywords = useCallback(() => {
+    if (!selectedProduct) return;
+    const extracted = extractKeywords({
+      productTitle: selectedProduct.title,
+      productDescription: selectedProduct.description,
+    });
+    setKeywordsList(extracted);
+    if (shopify?.toast) shopify.toast.show(`✨ Auto-extracted ${extracted.length} keywords!`);
+  }, [selectedProduct, shopify]);
 
   const handleGenerateAI = () => {
     if (!selectedProduct) return;
     setIsGenerating(true);
+
     setTimeout(() => {
+      let activeKeywords = keywordsList;
+      // Auto-extract keywords if currently empty
+      if (activeKeywords.length === 0) {
+        activeKeywords = extractKeywords({
+          productTitle: selectedProduct.title,
+          productDescription: selectedProduct.description,
+        });
+        setKeywordsList(activeKeywords);
+      }
+
       const generated = generateSeoCopy({
         productTitle: selectedProduct.title,
         productDescription: selectedProduct.description,
-        keywords,
+        keywords: activeKeywords,
         tone,
       });
 
@@ -140,9 +197,9 @@ export default function SeoOptimizer() {
       setIsGenerating(false);
       setFeedbackMessage({
         type: "info",
-        text: "✨ Generated 1 best SEO recommendation! Review or tweak it below, then click 'Save SEO Changes to Shopify Store' to save.",
+        text: "✨ Generated 1 best SEO recommendation and target keywords! Review below, then click 'Save to Shopify Store'.",
       });
-      if (shopify?.toast) shopify.toast.show("✨ Generated best SEO content!");
+      if (shopify?.toast) shopify.toast.show("✨ Generated best SEO content & keywords!");
     }, 300);
   };
 
@@ -154,105 +211,254 @@ export default function SeoOptimizer() {
       const res = await fetch("/api/save-seo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: selectedProduct.id, seoTitle, seoDescription }),
+        body: JSON.stringify({
+          productId: selectedProduct.id,
+          seoTitle,
+          seoDescription,
+          keywords: keywordsList,
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        setIsSaving(false);
+        // Update local product cache
+        selectedProduct.seoTitle = seoTitle;
+        selectedProduct.seoDescription = seoDescription;
+        selectedProduct.keywords = keywordsList;
+
         setFeedbackMessage({
           type: "success",
-          text: `🎉 SEO Saved! Title (${seoTitle.length} chars) & Meta (${seoDescription.length} chars) published to Shopify.`,
+          text: `✅ Saved successfully! Title, description, and ${keywordsList.length} keywords updated in Shopify.`,
         });
-        if (shopify?.toast) shopify.toast.show("✅ Saved SEO to Shopify catalog!");
-        // Update local product state so it reflects the newly published SEO data immediately without page reload
-        setSelectedProduct((prev) =>
-          prev ? { ...prev, seoTitle, seoDescription } : prev
-        );
-        setAllProducts((prev) =>
-          prev.map((p) =>
-            p.id === selectedProduct.id
-              ? { ...p, seoTitle, seoDescription }
-              : p
-          )
-        );
+        if (shopify?.toast) shopify.toast.show("✅ Saved SEO & Keywords to Shopify!");
       } else {
-        setIsSaving(false);
-        setFeedbackMessage({ type: "error", text: `❌ Error: ${data.error || "Failed to update product"}` });
+        setFeedbackMessage({
+          type: "error",
+          text: `❌ Error: ${data.error || "Failed to update Shopify"}`,
+        });
       }
     } catch (err) {
+      setFeedbackMessage({
+        type: "error",
+        text: `❌ Network error: ${err.message || "Failed to contact API"}`,
+      });
+    } finally {
       setIsSaving(false);
-      setFeedbackMessage({ type: "error", text: `❌ Error: ${err.message}` });
     }
   };
 
   return (
-    <s-page heading="AI SEO Optimizer">
-      <s-section heading="Product Catalog SEO Optimizer">
-        <s-paragraph>
-          Search your store catalog, generate titles under {TITLE_MAX} characters and complete meta descriptions under {DESC_MAX} characters, then publish directly to Shopify.
-        </s-paragraph>
-
-        {hasMore && (
-          <s-box padding="base" background="subdued" borderRadius="base" style={{ marginBottom: "16px" }}>
-            <s-text font-size="small" color="subdued">
-              ℹ️ Showing first 250 products. For catalogs with 250+ products, use the Bulk Optimizer for batch processing.
-            </s-text>
-          </s-box>
-        )}
-
-        {products.length === 0 ? (
-          <s-box padding="base" background="subdued" borderRadius="base">
-            <s-text font-weight="bold">No products found in store catalog.</s-text>
-          </s-box>
-        ) : (
+    <s-page heading="⚡ Single Product SEO & Keywords Optimizer">
+      <s-layout>
+        <s-layout-section>
           <s-stack direction="block" gap="large">
-            {/* Step 1 */}
+
+            {/* Step 1: Select Product */}
             <s-box padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="base">
-                <s-text font-weight="bold" font-size="medium">🔍 1. Search & Select Product ({products.length} Available)</s-text>
-                <div style={{ position: "relative", width: "100%" }}>
+                <s-text font-weight="bold" font-size="medium">📦 1. Search & Select Product</s-text>
+                <div style={{ position: "relative" }}>
                   <input
                     type="text"
-                    placeholder={`Type to search through ${products.length} products...`}
+                    placeholder="Search product by title..."
                     value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
                     onFocus={() => setIsDropdownOpen(true)}
-                    onChange={(e) => { setSearchQuery(e.target.value); setIsDropdownOpen(true); }}
-                    style={{ width: "100%", boxSizing: "border-box", padding: "12px 16px", borderRadius: "8px", border: "1.5px solid #008060", fontSize: "15px", fontWeight: "500", outline: "none", backgroundColor: "#ffffff" }}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "6px",
+                      border: "1px solid #c9cccf",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                      backgroundColor: "#ffffff",
+                    }}
                   />
                   {isDropdownOpen && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "260px", overflowY: "auto", backgroundColor: "#ffffff", border: "1px solid #c9cccf", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.15)", zIndex: 999, marginTop: "4px" }}>
-                      {filteredProducts.length === 0 ? (
-                        <div style={{ padding: "12px 16px", color: "#616161", fontSize: "14px" }}>
-                          {hasMore && searchQuery.trim().length > 0
-                            ? "No matches in first 250 products. Try Bulk Optimizer for full catalog search."
-                            : "No matching products found."
-                          }
-                        </div>
-                      ) : (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        backgroundColor: "#ffffff",
+                        border: "1px solid #c9cccf",
+                        borderRadius: "0 0 6px 6px",
+                        maxHeight: "220px",
+                        overflowY: "auto",
+                        zIndex: 1000,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                      }}
+                    >
+                      {filteredProducts.length > 0 ? (
                         filteredProducts.map((p) => (
-                          <button
+                          <div
                             key={p.id}
                             onClick={() => selectProduct(p)}
-                            style={{ padding: "12px 16px", borderBottom: "1px solid #f1f2f3", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: selectedProduct?.id === p.id ? "#f4f6f8" : "#ffffff", width: "100%", textAlign: "left", border: "none" }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f4f6f8"}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedProduct?.id === p.id ? "#f4f6f8" : "#ffffff"}
+                            style={{
+                              padding: "10px 14px",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #f1f2f3",
+                              backgroundColor: selectedProduct?.id === p.id ? "#f6f6f7" : "transparent",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
                           >
-                            <span style={{ fontWeight: "600", fontSize: "14px", color: "#202223" }}>{p.title}</span>
-                            <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "10px", background: p.status === "ACTIVE" ? "#e3f8e0" : "#f1f2f3", color: p.status === "ACTIVE" ? "#108043" : "#616161" }}>{p.status}</span>
-                          </button>
+                            <div>
+                              <div style={{ fontWeight: selectedProduct?.id === p.id ? "bold" : "normal", fontSize: "14px", color: "#202223" }}>{p.title}</div>
+                              <div style={{ fontSize: "12px", color: "#6d7175" }}>Status: {p.status}</div>
+                            </div>
+                            {p.keywords && p.keywords.length > 0 && (
+                              <span style={{ fontSize: "11px", background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px" }}>
+                                {p.keywords.length} kws
+                              </span>
+                            )}
+                          </div>
                         ))
+                      ) : (
+                        <div style={{ padding: "12px 14px", color: "#6d7175", fontSize: "14px" }}>No matching products</div>
                       )}
                     </div>
                   )}
                 </div>
+                {hasMore && (
+                  <div style={{ fontSize: "12px", color: "#6d7175" }}>
+                    ℹ️ Searching within first 250 products. Type in search box to filter.
+                  </div>
+                )}
               </s-stack>
             </s-box>
 
-            {/* Step 2 */}
+            {/* Step 2: AI Generator & Keywords Controls */}
             {selectedProduct && (
               <s-box padding="base" borderWidth="base" borderRadius="base">
                 <s-stack direction="block" gap="base">
-                  <s-text font-weight="bold" font-size="medium">🤖 2. AI Generator Controls</s-text>
+                  <s-text font-weight="bold" font-size="medium">🤖 2. Target Keywords & AI Generator Controls</s-text>
+
+                  {/* Target Keywords Tags Manager */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <s-text font-weight="bold">Target Search Keywords ({keywordsList.length})</s-text>
+                      <button
+                        type="button"
+                        onClick={handleAutoExtractKeywords}
+                        style={{
+                          background: "#f0fdf4",
+                          border: "1px solid #86efac",
+                          color: "#166534",
+                          borderRadius: "6px",
+                          padding: "4px 10px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          cursor: "pointer",
+                        }}
+                      >
+                        🤖 Auto-Suggest Keywords
+                      </button>
+                    </div>
+
+                    {/* Keywords Tag Badges */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "6px",
+                        minHeight: "36px",
+                        padding: "8px",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                        marginBottom: "8px",
+                        alignItems: "center",
+                      }}
+                    >
+                      {keywordsList.length > 0 ? (
+                        keywordsList.map((kw) => (
+                          <span
+                            key={kw}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              background: "#e0f2fe",
+                              color: "#0369a1",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              padding: "4px 10px",
+                              borderRadius: "14px",
+                              border: "1px solid #bae6fd",
+                            }}
+                          >
+                            <span>🏷️ {kw}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveKeyword(kw)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "#0369a1",
+                                fontWeight: "bold",
+                                fontSize: "13px",
+                                padding: 0,
+                                lineHeight: 1,
+                              }}
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+                          No target keywords set yet. Click &apos;Auto-Suggest Keywords&apos; or type below and press Enter.
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Add Keyword Input */}
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <input
+                        type="text"
+                        placeholder="Add a target keyword (e.g. running shoes, lightweight)..."
+                        value={newKeywordInput}
+                        onChange={(e) => setNewKeywordInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddKeyword();
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "13px",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddKeyword}
+                        style={{
+                          background: "#0f172a",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "8px 16px",
+                          fontSize: "13px",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Add Keyword
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tone of Voice */}
                   <div>
                     <s-text font-weight="bold">Tone of Voice</s-text>
                     <select
@@ -274,18 +480,13 @@ export default function SeoOptimizer() {
                       <option value="Urgent & Promotional">Urgent & Promotional</option>
                     </select>
                   </div>
-                  <s-text-field
-                    label="Focus Keywords (Optional)"
-                    value={keywords}
-                    onChange={(e) => setKeywords(e.currentTarget.value)}
-                    details="Example: eco-friendly, premium quality, top rated"
-                  />
+
                   <s-button
                     onClick={handleGenerateAI}
                     disabled={isGenerating}
                     {...(isGenerating ? { loading: true } : {})}
                   >
-                    {isGenerating ? "✨ Generating AI SEO..." : `✨ Generate SEO (title ≤ ${TITLE_MAX} / description ≤ ${DESC_MAX})`}
+                    {isGenerating ? "✨ Generating AI SEO & Keywords..." : `✨ Generate SEO (Title ≤ ${TITLE_MAX} / Description ≤ ${DESC_MAX})`}
                   </s-button>
                 </s-stack>
               </s-box>
@@ -296,7 +497,7 @@ export default function SeoOptimizer() {
               <s-stack direction="block" gap="base">
                 <s-stack direction="inline" align="space-between" align-items="center">
                   <s-text font-weight="bold" font-size="medium">🔍 3. Live Google Snippet & SEO Health Check</s-text>
-                  <div style={{ background: seoAnalysis.score === 100 ? "#e3f8e0" : "#fff4e5", color: seoAnalysis.score === 100 ? "#108043" : "#b7791f", padding: "6px 14px", borderRadius: "16px", fontWeight: "bold", fontSize: "14px" }}>
+                  <div style={{ background: seoAnalysis.score >= 80 ? "#e3f8e0" : "#fff4e5", color: seoAnalysis.score >= 80 ? "#108043" : "#b7791f", padding: "6px 14px", borderRadius: "16px", fontWeight: "bold", fontSize: "14px" }}>
                     SEO Score: {seoAnalysis.score} / 100
                   </div>
                 </s-stack>
@@ -349,22 +550,30 @@ export default function SeoOptimizer() {
                       {seoAnalysis.descOk ? `✓ Within limit: ${seoAnalysis.descLen} chars (max ${DESC_MAX})` : `⚠️ Over limit: ${seoAnalysis.descLen} chars (must be ${DESC_MAX} or less)`}
                     </div>
                   </div>
-                  <s-button
-                    variant="primary"
-                    onClick={handleSaveSeo}
-                    disabled={isSaving}
-                    {...(isSaving ? { loading: true } : {})}
-                  >
-                    {isSaving ? "💾 Saving to Shopify..." : "💾 Save SEO Changes to Shopify Store"}
-                  </s-button>
+
+                  {/* Keywords summary line */}
+                  <div style={{ fontSize: "12px", color: seoAnalysis.hasKw ? "#108043" : "#b7791f", fontWeight: "600" }}>
+                    {seoAnalysis.hasKw
+                      ? `✓ ${keywordsList.length} Target Keywords attached (will save as Shopify Metafield)`
+                      : "⚠️ No target keywords specified (optional, but recommended for better ranking)"}
+                  </div>
                 </s-stack>
+
+                <s-button
+                  onClick={handleSaveSeo}
+                  disabled={isSaving || !seoTitle}
+                  {...(isSaving ? { loading: true } : {})}
+                >
+                  {isSaving ? "Saving to Shopify..." : "💾 Save SEO & Keywords to Shopify Store"}
+                </s-button>
               </s-stack>
             </s-box>
-          </s-stack>
-        )}
-      </s-section>
 
-      {/* Page Loading Overlay */}
+          </s-stack>
+        </s-layout-section>
+      </s-layout>
+
+      {/* Loading Overlay */}
       {isPageLoading && (
         <div
           style={{
@@ -373,37 +582,14 @@ export default function SeoOptimizer() {
             left: 0,
             right: 0,
             bottom: 0,
-            background: "rgba(255, 255, 255, 0.9)",
+            background: "rgba(255, 255, 255, 0.7)",
             display: "flex",
-            flexDirection: "column",
             justifyContent: "center",
             alignItems: "center",
             zIndex: 9999,
           }}
         >
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #f3f3f3",
-              borderTop: "4px solid #008060",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-              marginBottom: "16px",
-            }}
-          />
-          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
-            Loading...
-          </div>
-          <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>
-            Please wait while we fetch your data
-          </div>
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
+          <div style={{ fontSize: "16px", fontWeight: "bold" }}>Loading...</div>
         </div>
       )}
     </s-page>
