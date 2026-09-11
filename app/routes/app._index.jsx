@@ -38,6 +38,9 @@ export const loader = async ({ request }) => {
                 title
                 description
               }
+              keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                value
+              }
             }
           }
         }

@@ -16,14 +16,25 @@ import {
 
 function parseMetafieldKeywords(rawVal) {
   if (!rawVal) return [];
-  try {
-    const parsed = JSON.parse(rawVal);
-    if (Array.isArray(parsed)) return parsed.map((k) => String(k).trim()).filter(Boolean);
-    if (typeof parsed === "string") return parsed.split(",").map((k) => k.trim()).filter(Boolean);
-  } catch (e) {
-    return String(rawVal).split(",").map((k) => k.trim()).filter(Boolean);
+  if (Array.isArray(rawVal)) return rawVal.map((k) => String(k).trim()).filter(Boolean);
+  const str = String(rawVal).trim();
+  if (!str || str === "[]" || str === '""') return [];
+
+  if (str.startsWith("[") && str.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed.map((k) => String(k).trim()).filter(Boolean);
+      }
+    } catch {
+      // fallback to delimiter split
+    }
   }
-  return [];
+
+  return str
+    .split(/[,\n\r]+/)
+    .map((k) => k.trim())
+    .filter(Boolean);
 }
 
 export const loader = async ({ request }) => {
@@ -259,16 +270,29 @@ export default function SeoOptimizer() {
       });
       const data = await res.json();
       if (data.success) {
-        // Update local product cache
-        selectedProduct.seoTitle = seoTitle;
-        selectedProduct.seoDescription = seoDescription;
-        selectedProduct.keywords = keywordsList;
+        if (keywordsList.length > 0 && !data.keywordsSaved) {
+          const reason =
+            data.keywordsError ||
+            "Store Target SEO Keywords definition is currently locked to single-line list.";
+          alert(
+            `⚠️ Partial Save: Saved Title & Meta Description, but target keywords could not be saved.\n\nReason: ${reason}\n\nTo fix in 10 seconds:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
+          );
+          setFeedbackMessage({
+            type: "warning",
+            text: `⚠️ Saved Title & Description, but keywords failed: ${reason}`,
+          });
+        } else {
+          // Update local product cache
+          selectedProduct.seoTitle = seoTitle;
+          selectedProduct.seoDescription = seoDescription;
+          selectedProduct.keywords = keywordsList;
 
-        setFeedbackMessage({
-          type: "success",
-          text: `✅ Saved successfully! Title, description, and ${keywordsList.length} comma-separated keywords saved to Shopify multiline metafield.`,
-        });
-        if (shopify?.toast) shopify.toast.show("✅ Saved SEO & Keywords to Shopify!");
+          setFeedbackMessage({
+            type: "success",
+            text: `✅ Saved successfully! Title, description, and ${keywordsList.length} comma-separated keywords saved to Shopify multiline metafield.`,
+          });
+          if (shopify?.toast) shopify.toast.show("✅ Saved SEO & Keywords to Shopify!");
+        }
       } else {
         setFeedbackMessage({
           type: "error",

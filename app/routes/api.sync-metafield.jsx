@@ -11,7 +11,7 @@ export const action = async ({ request }) => {
   // Force cache clear for this shop
   clearVerifiedShops(shop);
 
-  const result = await ensureKeywordsMetafieldDefinition(admin, shop);
+  const result = await ensureKeywordsMetafieldDefinition(admin, shop, true);
   return Response.json({
     success: result.success,
     result,
@@ -24,7 +24,7 @@ export const loader = async ({ request }) => {
   const shop = session?.shop || "";
 
   clearVerifiedShops(shop);
-  const result = await ensureKeywordsMetafieldDefinition(admin, shop);
+  const result = await ensureKeywordsMetafieldDefinition(admin, shop, true);
   return Response.json({
     success: result.success,
     result,

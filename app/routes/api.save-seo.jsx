@@ -7,9 +7,88 @@ function formatKeywords(raw) {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map((k) => String(k).trim()).filter(Boolean);
   return String(raw)
-    .split(",")
+    .split(/[,\n\r]+/)
     .map((k) => k.trim())
     .filter(Boolean);
+}
+
+/**
+ * Saves Target SEO Keywords as a Product Metafield (type: multi_line_text_field, comma-separated string).
+ * If Shopify returns a type mismatch error (e.g. expected list.single_line_text_field from legacy definition),
+ * it forces migration of the definition to multi_line_text_field and retries the mutation.
+ */
+async function saveProductKeywordsMetafield(admin, productId, commaSeparatedKeywords, shop) {
+  const mutation = `#graphql
+    mutation saveProductKeywords($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields {
+          id
+          key
+          value
+        }
+        userErrors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `;
+
+  const variables = {
+    metafields: [
+      {
+        ownerId: productId,
+        namespace: "seo",
+        key: "keywords",
+        type: "multi_line_text_field",
+        value: commaSeparatedKeywords,
+      },
+    ],
+  };
+
+  let res = await admin.graphql(mutation, { variables });
+  let json = await res.json();
+  let userErrors = json?.data?.metafieldsSet?.userErrors || [];
+
+  // Check for type mismatch error
+  const isTypeMismatch = userErrors.some(
+    (e) =>
+      e.message?.toLowerCase().includes("type does not match") ||
+      e.message?.toLowerCase().includes("expected") ||
+      e.message?.toLowerCase().includes("definition")
+  );
+
+  if (isTypeMismatch) {
+    console.log(
+      `[SaveSeo] Type mismatch for product ${productId}. Re-syncing metafield definition to multi_line_text_field with force=true...`
+    );
+    // Force delete old list definition and recreate as multi_line_text_field
+    const syncResult = await ensureKeywordsMetafieldDefinition(admin, shop, true);
+
+    if (syncResult.success) {
+      console.log(`[SaveSeo] Definition migrated successfully. Retrying metafieldsSet for ${productId}...`);
+      // Retry metafieldsSet
+      res = await admin.graphql(mutation, { variables });
+      json = await res.json();
+      userErrors = json?.data?.metafieldsSet?.userErrors || [];
+    } else {
+      return {
+        success: false,
+        error:
+          syncResult.error ||
+          "Store has conflicting metafield definition. Please delete 'Target SEO Keywords' under Shopify Admin → Settings → Custom data → Products.",
+      };
+    }
+  }
+
+  if (userErrors.length > 0) {
+    const msg = userErrors.map((e) => e.message).join("; ");
+    console.warn(`[SaveSeo] MetafieldsSet user errors for ${productId}:`, msg);
+    return { success: false, error: msg };
+  }
+
+  return { success: true, metafield: json?.data?.metafieldsSet?.metafields?.[0] };
 }
 
 export const action = async ({ request }) => {
@@ -74,6 +153,7 @@ export const action = async ({ request }) => {
           if (userErrors.length > 0) {
             errors.push({
               productId: item.productId,
+              field: "seo",
               error: userErrors.map((e) => e.message).join(", "),
             });
             continue;
@@ -86,42 +166,29 @@ export const action = async ({ request }) => {
           if (keywordsList.length > 0) {
             const commaSeparatedKeywords = keywordsList.join(", ");
             try {
-              const metaRes = await admin.graphql(
-                `#graphql
-                mutation saveProductKeywords($metafields: [MetafieldsSetInput!]!) {
-                  metafieldsSet(metafields: $metafields) {
-                    metafields {
-                      id
-                      key
-                      value
-                    }
-                    userErrors {
-                      field
-                      message
-                    }
-                  }
-                }`,
-                {
-                  variables: {
-                    metafields: [
-                      {
-                        ownerId: item.productId,
-                        namespace: "seo",
-                        key: "keywords",
-                        type: "multi_line_text_field",
-                        value: commaSeparatedKeywords,
-                      },
-                    ],
-                  },
-                }
+              const metaResult = await saveProductKeywordsMetafield(
+                admin,
+                item.productId,
+                commaSeparatedKeywords,
+                shop
               );
-              const metaJson = await metaRes.json();
-              const metaErrors = metaJson?.data?.metafieldsSet?.userErrors || [];
-              if (metaErrors.length === 0) {
+
+              if (metaResult.success) {
                 keywordsUpdatedCount++;
+              } else {
+                errors.push({
+                  productId: item.productId,
+                  field: "keywords",
+                  error: `Keywords not saved: ${metaResult.error}`,
+                });
               }
             } catch (metaErr) {
               console.warn(`Could not save keywords metafield for ${item.productId}:`, metaErr.message);
+              errors.push({
+                productId: item.productId,
+                field: "keywords",
+                error: `Keywords error: ${metaErr.message}`,
+              });
             }
           }
         } catch (e) {
@@ -141,10 +208,16 @@ export const action = async ({ request }) => {
         });
       }
 
+      const hasKeywordsErrors = errors.some((e) => e.field === "keywords");
+      const keywordsErrorMessage = hasKeywordsErrors
+        ? errors.find((e) => e.field === "keywords")?.error
+        : null;
+
       return Response.json({
-        success: true,
+        success: successCount > 0,
         updatedCount: successCount,
         keywordsCount: keywordsUpdatedCount,
+        keywordsError: keywordsErrorMessage,
         errors,
       });
     }
@@ -176,7 +249,8 @@ export const action = async ({ request }) => {
             message
           }
         }
-      }`,
+      }
+    `,
       {
         variables: {
           input: {
@@ -202,46 +276,26 @@ export const action = async ({ request }) => {
 
     // 2. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
     let hasKeywords = false;
+    let keywordsError = null;
     const keywordsList = formatKeywords(keywords);
     if (keywordsList.length > 0) {
       const commaSeparatedKeywords = keywordsList.join(", ");
       try {
-        const metaRes = await admin.graphql(
-          `#graphql
-          mutation saveProductKeywords($metafields: [MetafieldsSetInput!]!) {
-            metafieldsSet(metafields: $metafields) {
-              metafields {
-                id
-                key
-                value
-              }
-              userErrors {
-                field
-                message
-              }
-            }
-          }`,
-          {
-            variables: {
-              metafields: [
-                {
-                  ownerId: productId,
-                  namespace: "seo",
-                  key: "keywords",
-                  type: "multi_line_text_field",
-                  value: commaSeparatedKeywords,
-                },
-              ],
-            },
-          }
+        const metaResult = await saveProductKeywordsMetafield(
+          admin,
+          productId,
+          commaSeparatedKeywords,
+          shop
         );
-        const metaJson = await metaRes.json();
-        const metaErrors = metaJson?.data?.metafieldsSet?.userErrors || [];
-        if (metaErrors.length === 0) {
+
+        if (metaResult.success) {
           hasKeywords = true;
+        } else {
+          keywordsError = metaResult.error;
         }
       } catch (metaErr) {
         console.warn(`Could not save keywords metafield for ${productId}:`, metaErr.message);
+        keywordsError = metaErr.message;
       }
     }
 
@@ -258,6 +312,7 @@ export const action = async ({ request }) => {
       success: true,
       product: responseJson?.data?.productUpdate?.product,
       keywordsSaved: hasKeywords ? keywordsList : null,
+      keywordsError,
     });
   } catch (err) {
     console.error("API update error:", err);

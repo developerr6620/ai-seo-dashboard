@@ -15,14 +15,25 @@ import {
 
 function parseMetafieldKeywords(rawVal) {
   if (!rawVal) return [];
-  try {
-    const parsed = JSON.parse(rawVal);
-    if (Array.isArray(parsed)) return parsed.map((k) => String(k).trim()).filter(Boolean);
-    if (typeof parsed === "string") return parsed.split(",").map((k) => k.trim()).filter(Boolean);
-  } catch (e) {
-    return String(rawVal).split(",").map((k) => k.trim()).filter(Boolean);
+  if (Array.isArray(rawVal)) return rawVal.map((k) => String(k).trim()).filter(Boolean);
+  const str = String(rawVal).trim();
+  if (!str || str === "[]" || str === '""') return [];
+
+  if (str.startsWith("[") && str.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed.map((k) => String(k).trim()).filter(Boolean);
+      }
+    } catch {
+      // fallback to delimiter split
+    }
   }
-  return [];
+
+  return str
+    .split(/[,\n\r]+/)
+    .map((k) => k.trim())
+    .filter(Boolean);
 }
 
 export const loader = async ({ request }) => {
@@ -283,7 +294,8 @@ export default function BulkOptimizer() {
       const res = await fetch("/api/sync-metafield", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        setToastMessage("✅ Metafield definition successfully synced to multiline text!");
+        setToastMessage("✅ Target SEO Keywords definition successfully synced to multiline text!");
+        revalidator.revalidate();
       } else {
         alert(
           data.result?.error ||
@@ -455,7 +467,24 @@ export default function BulkOptimizer() {
       const data = await resp.json();
 
       if (data.success) {
-        setToastMessage(`🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products to Shopify catalog.`);
+        if (data.keywordsCount > 0) {
+          setToastMessage(
+            `🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products and their multiline target keywords to Shopify catalog.`
+          );
+        } else if (itemsToSave.some((i) => i.keywords && i.keywords.length > 0)) {
+          const reason =
+            data.keywordsError ||
+            (data.errors && data.errors[0]?.error) ||
+            "Target SEO Keywords definition in your store is locked to single-line list.";
+          alert(
+            `⚠️ Partial Save: Saved ${data.updatedCount || itemsToSave.length} product titles & descriptions, but keywords could not be saved.\n\nReason: ${reason}\n\nTo fix in 10 seconds:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
+          );
+          setToastMessage(
+            `⚠️ Titles & descriptions saved (${data.updatedCount || itemsToSave.length}), but keywords could not be saved. See alert.`
+          );
+        } else {
+          setToastMessage(`🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products to Shopify catalog.`);
+        }
         setSelectedIds(new Set());
         setProposedUpdates({});
         // Revalidate loader data (re-runs the loader) without a full page nav — safe in embedded app context
