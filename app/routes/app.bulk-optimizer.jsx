@@ -288,6 +288,20 @@ export default function BulkOptimizer() {
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
+  // pendingClearProposals: true = wait for revalidation to idle, then clear proposals
+  const [pendingClearProposals, setPendingClearProposals] = useState(false);
+  // savedProductData: local cache of what was just saved to Shopify (used for instant status update)
+  const [savedProductData, setSavedProductData] = useState({});
+
+  // When revalidation completes, clear proposals (so the freshly-loaded data shows "Optimized")
+  useEffect(() => {
+    if (revalidator.state === "idle" && pendingClearProposals) {
+      setProposedUpdates({});
+      setSelectedIds(new Set());
+      setSavedProductData({});
+      setPendingClearProposals(false);
+    }
+  }, [revalidator.state, pendingClearProposals]);
 
   // Sync Metafield Definition to Multiline Text
   const handleSyncMetafield = async () => {
@@ -478,19 +492,27 @@ export default function BulkOptimizer() {
             (data.errors && data.errors[0]?.error) ||
             "Target SEO Keywords definition in your store is locked to single-line list.";
           alert(
-            `⚠️ Partial Save: Saved ${data.updatedCount || itemsToSave.length} product titles & descriptions, but keywords could not be saved.\n\nReason: ${reason}\n\nTo fix in 10 seconds:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
+            `⚠️ Partial Save: Saved ${data.updatedCount || itemsToSave.length} product titles & descriptions, but keywords could not be saved.\n\nReason: ${reason}\n\nTo fix:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
           );
           setToastMessage(
             `⚠️ Titles & descriptions saved (${data.updatedCount || itemsToSave.length}), but keywords could not be saved.`
           );
         } else {
-          setToastMessage(`🎉 Saved ${data.updatedCount || itemsToSave.length} products to Shopify!`);
+          setToastMessage(`🎉 Saved ${data.updatedCount || itemsToSave.length} products to Shopify! Refreshing status...`);
         }
-        // Clear proposals and selection only after successful save
-        setSelectedIds(new Set());
-        setProposedUpdates({});
-        // Revalidate loader data to reflect updated SEO from Shopify
+        // Build a local cache of what was just saved so rows show "Optimized" immediately
+        const justSaved = {};
+        for (const item of itemsToSave) {
+          justSaved[item.productId] = {
+            seoTitle: item.seoTitle,
+            seoDescription: item.seoDescription,
+            keywords: item.keywords,
+          };
+        }
+        setSavedProductData(justSaved);
+        // Trigger revalidation — proposals stay visible until revalidation completes
         revalidator.revalidate();
+        setPendingClearProposals(true);
         setIsBulkSaving(false);
       } else {
         alert(`Save failed: ${data.error || "Unknown error"}`);
@@ -977,15 +999,20 @@ export default function BulkOptimizer() {
                 {filteredProducts.map((p) => {
                   const isSelected = selectedIds.has(p.id);
                   const proposal = proposedUpdates[p.id];
-                  // When proposal exists, use proposal values for live preview; otherwise use the saved Shopify values.
-                  // For status evaluation, use the effective displayed title
-                  const titleToDisplay = proposal ? proposal.seoTitle : p.seoTitle;
-                  const descToDisplay = proposal ? proposal.seoDescription : p.seoDescription;
+                  // justSaved: data we just wrote to Shopify (exists during revalidation delay)
+                  const justSaved = savedProductData[p.id];
+                  // Effective data: proposal > just-saved > loader data (stale)
+                  const effectiveSeoTitle = proposal ? proposal.seoTitle : (justSaved ? justSaved.seoTitle : p.seoTitle);
+                  const effectiveSeoDesc = proposal ? proposal.seoDescription : (justSaved ? justSaved.seoDescription : p.seoDescription);
+                  const effectiveHasCustomTitle = proposal ? true : (justSaved ? true : p.hasCustomSeoTitle);
+
+                  const titleToDisplay = effectiveSeoTitle;
+                  const descToDisplay = effectiveSeoDesc;
 
                   const titleLen = titleToDisplay.length;
                   const descLen = descToDisplay.length;
-                  // isTitleGood: has a custom SEO title explicitly set (not just product title fallback) AND within char limits
-                  const isTitleGood = proposal ? isTitleOk(titleToDisplay) : (p.hasCustomSeoTitle && isTitleOk(p.seoTitle));
+                  // isTitleGood: has a custom SEO title explicitly set AND within char limits
+                  const isTitleGood = effectiveHasCustomTitle && isTitleOk(effectiveSeoTitle);
                   const isDescGood = isDescOk(descToDisplay);
 
                   return (
@@ -1061,13 +1088,13 @@ export default function BulkOptimizer() {
                           </div>
                         ) : (
                           <div>
-                            {p.hasCustomSeoTitle ? (
+                            {effectiveHasCustomTitle ? (
                               <>
                                 <div style={{ color: "#0f172a", fontSize: "12px", fontWeight: "500", lineHeight: "1.4" }}>
-                                  {p.seoTitle}
+                                  {effectiveSeoTitle}
                                 </div>
-                                <div style={{ fontSize: "11px", color: isTitleOk(p.seoTitle) ? "#108043" : "#6d7175", marginTop: "4px", fontWeight: "500" }}>
-                                  {p.seoTitle.length} chars {isTitleOk(p.seoTitle) ? "✓" : ""}
+                                <div style={{ fontSize: "11px", color: isTitleOk(effectiveSeoTitle) ? "#108043" : "#6d7175", marginTop: "4px", fontWeight: "500" }}>
+                                  {effectiveSeoTitle.length} chars {isTitleOk(effectiveSeoTitle) ? "✓" : ""}
                                 </div>
                               </>
                             ) : (
