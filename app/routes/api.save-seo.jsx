@@ -1,8 +1,10 @@
 import { authenticate } from "../shopify.server";
 import { enforceSeoLimits } from "../lib/seoCopy";
+import { updateAuditStatsOnSave } from "../lib/storeAudit.server";
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session?.shop;
   
   try {
     const data = await request.json();
@@ -70,6 +72,14 @@ export const action = async ({ request }) => {
         }
       }
 
+      if (successCount > 0 && shop) {
+        updateAuditStatsOnSave(shop, {
+          addedTitles: successCount,
+          addedDescs: successCount,
+          addedOptimal: successCount,
+        });
+      }
+
       return Response.json({
         success: true,
         updatedCount: successCount,
@@ -124,6 +134,14 @@ export const action = async ({ request }) => {
       return Response.json({
         success: false,
         error: userErrors.map((e) => e.message).join(", "),
+      });
+    }
+
+    if (shop) {
+      updateAuditStatsOnSave(shop, {
+        addedTitles: 1,
+        addedDescs: seoDescription ? 1 : 0,
+        addedOptimal: 1,
       });
     }
 
