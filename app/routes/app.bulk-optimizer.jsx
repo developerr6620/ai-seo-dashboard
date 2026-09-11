@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
-import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect, useRevalidator } from "react-router";
+import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect, useRevalidator, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
@@ -287,6 +287,7 @@ export default function BulkOptimizer() {
   const [proposedUpdates, setProposedUpdates] = useState({}); // { [productId]: { seoTitle, seoDescription } }
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   // pendingClearProposals: true = wait for revalidation to idle, then clear proposals
   const [pendingClearProposals, setPendingClearProposals] = useState(false);
@@ -822,6 +823,84 @@ export default function BulkOptimizer() {
               </div>
             </div>
           )}
+        </div>
+      </s-section>
+
+      {/* Short Format Theme Snippet Helper Banner */}
+      <s-section>
+        <div
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #86efac",
+            borderRadius: "10px",
+            padding: "12px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "12px",
+            marginBottom: "16px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "20px" }}>🌐</span>
+            <div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#166534" }}>
+                Display Keywords in SEO Extensions (Detailed SEO, SEO Meta in 1-Click)
+              </div>
+              <div style={{ fontSize: "12px", color: "#15803d", marginTop: "2px" }}>
+                Shopify themes natively show SEO Title & Description. Add a 1-line snippet to also show Keywords.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                const snippet = `{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`;
+                navigator.clipboard.writeText(snippet);
+                setCopiedSnippet(true);
+                setToastMessage("📋 Liquid snippet copied to clipboard!");
+                setTimeout(() => setCopiedSnippet(false), 3000);
+              }}
+              style={{
+                background: copiedSnippet ? "#16a34a" : "#008060",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "6px",
+                padding: "7px 14px",
+                fontSize: "12px",
+                fontWeight: "700",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                transition: "all 0.2s ease",
+              }}
+            >
+              {copiedSnippet ? "✅ Copied!" : "📋 Copy Theme Code"}
+            </button>
+            <Link
+              to="/app#theme-setup"
+              style={{
+                fontSize: "12px",
+                fontWeight: "700",
+                color: "#166534",
+                background: "#ffffff",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                border: "1px solid #86efac",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span>📖 View Setup Guide in Dashboard</span>
+              <span>→</span>
+            </Link>
+          </div>
         </div>
       </s-section>
 
