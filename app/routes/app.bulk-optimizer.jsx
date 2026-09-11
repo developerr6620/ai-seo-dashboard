@@ -202,6 +202,8 @@ export const loader = async ({ request }) => {
         seoTitle: String(p.seo?.title || ""),
         seoDescription: String(p.seo?.description || ""),
         keywords: parseMetafieldKeywords(p.keywordsMetafield?.value),
+        // hasCustomSeoTitle is true only when Shopify seo.title is explicitly set
+        hasCustomSeoTitle: Boolean(p.seo?.title?.trim()),
       };
     });
 
@@ -317,7 +319,8 @@ export default function BulkOptimizer() {
         return false;
       }
       // Status category filter
-      const hasTitle = Boolean(p.seoTitle?.trim());
+      // "Missing Title" means the product has no explicit custom SEO title set in Shopify
+      const hasTitle = p.hasCustomSeoTitle;
       const hasDesc = Boolean(p.seoDescription?.trim());
       const isTitleOptimal = isTitleOk(p.seoTitle);
       const isDescOptimal = isDescOk(p.seoDescription);
@@ -335,7 +338,7 @@ export default function BulkOptimizer() {
   const counts = useMemo(() => {
     const total = pagination.totalCount || products.length;
     // For page-level counts, use current products
-    const pageMissingTitle = products.filter((p) => !p.seoTitle?.trim()).length;
+    const pageMissingTitle = products.filter((p) => !p.hasCustomSeoTitle).length;
     const pageMissingDesc = products.filter((p) => !p.seoDescription?.trim()).length;
     const pageMissingKeywords = products.filter((p) => !p.keywords || p.keywords.length === 0).length;
     const pageSuboptimal = products.filter(
@@ -438,22 +441,20 @@ export default function BulkOptimizer() {
     }));
   };
 
-  // Save all proposals to Shopify
+  // Save all proposals to Shopify — saves ALL proposals (regardless of selection)
   const handleSaveBulkToShopify = async () => {
-    const itemsToSave = [];
-    for (const [productId, proposal] of Object.entries(proposedUpdates)) {
-      if (selectedIds.has(productId) && proposal.seoTitle) {
-        itemsToSave.push({
-          productId,
-          seoTitle: proposal.seoTitle,
-          seoDescription: proposal.seoDescription || "",
-          keywords: proposal.keywords || [],
-        });
-      }
-    }
+    // Build items from ALL proposals (not just selected ones)
+    const itemsToSave = Object.entries(proposedUpdates)
+      .filter(([, proposal]) => proposal.seoTitle)
+      .map(([productId, proposal]) => ({
+        productId,
+        seoTitle: proposal.seoTitle,
+        seoDescription: proposal.seoDescription || "",
+        keywords: proposal.keywords || [],
+      }));
 
     if (itemsToSave.length === 0) {
-      alert("No proposed updates selected to save.");
+      alert("No proposals to save. Please generate AI SEO first.");
       return;
     }
 
@@ -469,7 +470,7 @@ export default function BulkOptimizer() {
       if (data.success) {
         if (data.keywordsCount > 0) {
           setToastMessage(
-            `🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products and their multiline target keywords to Shopify catalog.`
+            `🎉 Saved ${data.updatedCount || itemsToSave.length} products with multiline target keywords to Shopify!`
           );
         } else if (itemsToSave.some((i) => i.keywords && i.keywords.length > 0)) {
           const reason =
@@ -480,14 +481,15 @@ export default function BulkOptimizer() {
             `⚠️ Partial Save: Saved ${data.updatedCount || itemsToSave.length} product titles & descriptions, but keywords could not be saved.\n\nReason: ${reason}\n\nTo fix in 10 seconds:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
           );
           setToastMessage(
-            `⚠️ Titles & descriptions saved (${data.updatedCount || itemsToSave.length}), but keywords could not be saved. See alert.`
+            `⚠️ Titles & descriptions saved (${data.updatedCount || itemsToSave.length}), but keywords could not be saved.`
           );
         } else {
-          setToastMessage(`🎉 Success! Saved ${data.updatedCount || itemsToSave.length} products to Shopify catalog.`);
+          setToastMessage(`🎉 Saved ${data.updatedCount || itemsToSave.length} products to Shopify!`);
         }
+        // Clear proposals and selection only after successful save
         setSelectedIds(new Set());
         setProposedUpdates({});
-        // Revalidate loader data (re-runs the loader) without a full page nav — safe in embedded app context
+        // Revalidate loader data to reflect updated SEO from Shopify
         revalidator.revalidate();
         setIsBulkSaving(false);
       } else {
@@ -719,7 +721,7 @@ export default function BulkOptimizer() {
                       Saving to Shopify...
                     </>
                   ) : (
-                    "💾 Apply & Save to Shopify"
+                    `💾 Save ${Object.keys(proposedUpdates).length} to Shopify`
                   )}
                 </button>
               )}
@@ -975,12 +977,15 @@ export default function BulkOptimizer() {
                 {filteredProducts.map((p) => {
                   const isSelected = selectedIds.has(p.id);
                   const proposal = proposedUpdates[p.id];
+                  // When proposal exists, use proposal values for live preview; otherwise use the saved Shopify values.
+                  // For status evaluation, use the effective displayed title
                   const titleToDisplay = proposal ? proposal.seoTitle : p.seoTitle;
                   const descToDisplay = proposal ? proposal.seoDescription : p.seoDescription;
 
                   const titleLen = titleToDisplay.length;
                   const descLen = descToDisplay.length;
-                  const isTitleGood = isTitleOk(titleToDisplay);
+                  // isTitleGood: has a custom SEO title explicitly set (not just product title fallback) AND within char limits
+                  const isTitleGood = proposal ? isTitleOk(titleToDisplay) : (p.hasCustomSeoTitle && isTitleOk(p.seoTitle));
                   const isDescGood = isDescOk(descToDisplay);
 
                   return (
@@ -1056,12 +1061,18 @@ export default function BulkOptimizer() {
                           </div>
                         ) : (
                           <div>
-                            <div style={{ color: p.seoTitle ? "#0f172a" : "#d9381e", fontSize: "12px", fontWeight: "500", lineHeight: "1.4" }}>
-                              {p.seoTitle || "⚠️ Missing Title"}
-                            </div>
-                            {p.seoTitle && (
-                              <div style={{ fontSize: "11px", color: isTitleGood ? "#108043" : "#6d7175", marginTop: "4px", fontWeight: "500" }}>
-                                {p.seoTitle.length} chars {isTitleGood ? "✓" : ""}
+                            {p.hasCustomSeoTitle ? (
+                              <>
+                                <div style={{ color: "#0f172a", fontSize: "12px", fontWeight: "500", lineHeight: "1.4" }}>
+                                  {p.seoTitle}
+                                </div>
+                                <div style={{ fontSize: "11px", color: isTitleOk(p.seoTitle) ? "#108043" : "#6d7175", marginTop: "4px", fontWeight: "500" }}>
+                                  {p.seoTitle.length} chars {isTitleOk(p.seoTitle) ? "✓" : ""}
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ color: "#d9381e", fontSize: "12px", fontWeight: "600" }}>
+                                ⚠️ Missing Custom SEO Title
                               </div>
                             )}
                           </div>
