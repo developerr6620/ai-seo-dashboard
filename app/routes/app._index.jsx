@@ -147,7 +147,20 @@ export default function Dashboard() {
   const missingDescriptions = stats.missingDesc;
 
   return (
-    <s-page heading={`Welcome, ${shop.name}`}>
+    <s-page full-width heading={`Welcome, ${shop.name}`}>
+      <style>{`
+        s-page {
+          display: block;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        s-section {
+          display: block;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+      `}</style>
+      <div style={{ width: "100%", maxWidth: "100%", margin: "0 auto", padding: "0 12px", boxSizing: "border-box" }}>
       {/* Background Audit Progress Banner */}
       {isAuditing && (
         <s-section>
@@ -830,6 +843,7 @@ export default function Dashboard() {
           100% { transform: rotate(360deg); }
         }
       `}</style>
+      </div>
     </s-page>
   );
 }

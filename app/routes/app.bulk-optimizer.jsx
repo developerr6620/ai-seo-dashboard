@@ -488,13 +488,24 @@ export default function BulkOptimizer() {
   };
 
   return (
-    <s-page heading="🚀 1-Click Bulk SEO Optimizer">
+    <s-page full-width heading="🚀 1-Click Bulk SEO Optimizer">
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        s-page {
+          display: block;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        s-section {
+          display: block;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
       `}</style>
+      <div style={{ width: "100%", maxWidth: "100%", margin: "0 auto", padding: "0 12px", boxSizing: "border-box" }}>
 
       {/* Toast */}
       {toastMessage && (
@@ -763,50 +774,89 @@ export default function BulkOptimizer() {
 
       {/* Filter Chips & Selection Bar */}
       <s-section>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+        <div
+          style={{
+            background: "#ffffff",
+            padding: "12px 18px",
+            borderRadius: "10px",
+            border: "1px solid #e2e8f0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "12px",
+            marginBottom: "16px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
           {/* Filter Pills */}
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
             {[
-              { id: "all", label: `All (${products.length} of ${pagination.totalCount})` },
-              { id: "missing-title", label: `🚨 Missing Title (${counts.missingTitle})` },
-              { id: "missing-desc", label: `📝 Missing Desc (${counts.missingDesc})` },
-              { id: "missing-keywords", label: `🏷️ Missing Keywords (${counts.missingKeywords})` },
-              { id: "suboptimal", label: `🟡 Suboptimal (${counts.suboptimal})` },
-              { id: "optimized", label: `✅ Optimized (${counts.optimized})` },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setFilter(tab.id)}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: "20px",
-                  border: filter === tab.id ? "1px solid #008060" : "1px solid #dcdfe3",
-                  background: filter === tab.id ? "#e3f8e0" : "#ffffff",
-                  color: filter === tab.id ? "#008060" : "#4a4a4a",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+              { id: "all", label: "All Products", count: `${products.length} of ${pagination.totalCount}` },
+              { id: "missing-title", label: "Missing Title", count: counts.missingTitle, icon: "⚠️" },
+              { id: "missing-desc", label: "Missing Description", count: counts.missingDesc, icon: "📝" },
+              { id: "missing-keywords", label: "Missing Keywords", count: counts.missingKeywords, icon: "🏷️" },
+              { id: "suboptimal", label: "Needs Review", count: counts.suboptimal, icon: "🟡" },
+              { id: "optimized", label: "Optimized", count: counts.optimized, icon: "✅" },
+            ].map((tab) => {
+              const isActive = filter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setFilter(tab.id)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "20px",
+                    border: isActive ? "1.5px solid #008060" : "1px solid #e2e8f0",
+                    background: isActive ? "#ecfdf5" : "#f8fafc",
+                    color: isActive ? "#065f46" : "#334155",
+                    fontSize: "12px",
+                    fontWeight: isActive ? "700" : "500",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {tab.icon && <span style={{ fontSize: "12px" }}>{tab.icon}</span>}
+                  <span>{tab.label}</span>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      padding: "1px 6px",
+                      borderRadius: "10px",
+                      background: isActive ? "#10b981" : "#e2e8f0",
+                      color: isActive ? "#ffffff" : "#475569",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Search Field */}
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: "6px",
-              border: "1px solid #c9cccf",
-              fontSize: "13px",
-              minWidth: "180px",
-            }}
-          />
+          <div style={{ position: "relative", minWidth: "240px", flex: "1", maxWidth: "320px" }}>
+            <input
+              type="text"
+              placeholder="🔍 Search products by title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                border: "1px solid #cbd5e1",
+                fontSize: "13px",
+                background: "#ffffff",
+                boxSizing: "border-box",
+                outline: "none",
+              }}
+            />
+          </div>
         </div>
 
         {/* Pagination Controls */}
@@ -883,13 +933,13 @@ export default function BulkOptimizer() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead>
-                <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e1e3e5", color: "#6d7175", textAlign: "left" }}>
-                  <th style={{ padding: "10px 14px", width: "36px" }}></th>
-                  <th style={{ padding: "10px 14px", width: "18%" }}>Product</th>
-                  <th style={{ padding: "10px 14px", width: "23%" }}>SEO Title</th>
-                  <th style={{ padding: "10px 14px", width: "25%" }}>Meta Description</th>
-                  <th style={{ padding: "10px 14px", width: "24%" }}>Target Keywords</th>
-                  <th style={{ padding: "10px 14px", width: "10%", textAlign: "right" }}>Status</th>
+                <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", color: "#475569", textAlign: "left", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  <th style={{ padding: "12px 14px", width: "40px" }}></th>
+                  <th style={{ padding: "12px 14px", width: "20%" }}>Product</th>
+                  <th style={{ padding: "12px 14px", width: "24%" }}>SEO Title</th>
+                  <th style={{ padding: "12px 14px", width: "26%" }}>Meta Description</th>
+                  <th style={{ padding: "12px 14px", width: "22%" }}>Target Keywords</th>
+                  <th style={{ padding: "12px 14px", width: "8%", textAlign: "right" }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -922,54 +972,32 @@ export default function BulkOptimizer() {
                         />
                       </td>
 
-                      {/* Product Info & Keywords */}
+                      {/* Product Info (Title & Handle only - no duplicate keywords) */}
                       <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
-                        <div style={{ fontWeight: "700", color: "#202223", marginBottom: "4px" }}>{p.title}</div>
-                        <div style={{ fontSize: "11px", color: "#6d7175" }}>Handle: {p.handle}</div>
-
-                        {/* Display Keywords Tags */}
-                        <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                          {(proposal?.keywords || p.keywords)?.slice(0, 4).map((kw) => (
-                            <span
-                              key={kw}
-                              style={{
-                                fontSize: "10px",
-                                padding: "2px 6px",
-                                borderRadius: "10px",
-                                background: proposal ? "#e0f2fe" : "#f1f5f9",
-                                color: proposal ? "#0369a1" : "#475569",
-                                border: `1px solid ${proposal ? "#bae6fd" : "#cbd5e1"}`,
-                              }}
-                            >
-                              🏷️ {kw}
-                            </span>
-                          ))}
-                          {((proposal?.keywords || p.keywords)?.length > 4) && (
-                            <span style={{ fontSize: "10px", color: "#64748b" }}>
-                              +{(proposal?.keywords || p.keywords).length - 4} more
-                            </span>
-                          )}
-                          {!(proposal?.keywords?.length || p.keywords?.length) && (
-                            <span style={{ fontSize: "10px", color: "#94a3b8", fontStyle: "italic" }}>
-                              No keywords
-                            </span>
-                          )}
+                        <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "13px", lineHeight: "1.35", marginBottom: "4px" }}>
+                          {p.title}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#64748b" }}>
+                          Handle: <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: "3px" }}>{p.handle}</code>
                         </div>
 
                         {proposal && (
                           <span
                             style={{
-                              display: "inline-block",
-                              marginTop: "6px",
-                              padding: "2px 6px",
-                              borderRadius: "4px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              marginTop: "8px",
+                              padding: "2px 8px",
+                              borderRadius: "12px",
                               background: "#dcfce7",
                               color: "#15803d",
                               fontSize: "10px",
                               fontWeight: "700",
+                              border: "1px solid #bbf7d0",
                             }}
                           >
-                            AI Proposal Ready
+                            ✨ AI Proposal Ready
                           </span>
                         )}
                       </td>
@@ -984,11 +1012,13 @@ export default function BulkOptimizer() {
                               onChange={(e) => handleEditProposal(p.id, "seoTitle", e.target.value)}
                               style={{
                                 width: "100%",
-                                padding: "6px 8px",
+                                padding: "8px 10px",
                                 borderRadius: "6px",
-                                border: `1px solid ${isTitleGood ? "#108043" : "#d9381e"}`,
+                                border: `1.5px solid ${isTitleGood ? "#108043" : "#d9381e"}`,
                                 fontSize: "12px",
                                 boxSizing: "border-box",
+                                background: "#ffffff",
+                                color: "#0f172a",
                               }}
                             />
                             <div style={{ fontSize: "11px", marginTop: "4px", color: isTitleGood ? "#108043" : "#b7791f", fontWeight: "600" }}>
@@ -997,11 +1027,11 @@ export default function BulkOptimizer() {
                           </div>
                         ) : (
                           <div>
-                            <div style={{ color: p.seoTitle ? "#202223" : "#d9381e", fontSize: "12px" }}>
-                              {p.seoTitle || "❌ Missing Title"}
+                            <div style={{ color: p.seoTitle ? "#0f172a" : "#d9381e", fontSize: "12px", fontWeight: "500", lineHeight: "1.4" }}>
+                              {p.seoTitle || "⚠️ Missing Title"}
                             </div>
                             {p.seoTitle && (
-                              <div style={{ fontSize: "11px", color: isTitleGood ? "#108043" : "#6d7175", marginTop: "2px" }}>
+                              <div style={{ fontSize: "11px", color: isTitleGood ? "#108043" : "#6d7175", marginTop: "4px", fontWeight: "500" }}>
                                 {p.seoTitle.length} chars {isTitleGood ? "✓" : ""}
                               </div>
                             )}
@@ -1019,12 +1049,14 @@ export default function BulkOptimizer() {
                               onChange={(e) => handleEditProposal(p.id, "seoDescription", e.target.value)}
                               style={{
                                 width: "100%",
-                                padding: "6px 8px",
+                                padding: "8px 10px",
                                 borderRadius: "6px",
-                                border: `1px solid ${isDescGood ? "#108043" : "#d9381e"}`,
+                                border: `1.5px solid ${isDescGood ? "#108043" : "#d9381e"}`,
                                 fontSize: "12px",
                                 boxSizing: "border-box",
                                 fontFamily: "inherit",
+                                background: "#ffffff",
+                                color: "#0f172a",
                               }}
                             />
                             <div style={{ fontSize: "11px", marginTop: "4px", color: isDescGood ? "#108043" : "#b7791f", fontWeight: "600" }}>
@@ -1033,11 +1065,11 @@ export default function BulkOptimizer() {
                           </div>
                         ) : (
                           <div>
-                            <div style={{ color: p.seoDescription ? "#4a4a4a" : "#d9381e", fontSize: "12px", lineHeight: "1.4" }}>
-                              {p.seoDescription ? `${p.seoDescription.slice(0, 70)}...` : "❌ Missing Meta Description"}
+                            <div style={{ color: p.seoDescription ? "#334155" : "#d9381e", fontSize: "12px", lineHeight: "1.4" }}>
+                              {p.seoDescription ? `${p.seoDescription.slice(0, 85)}${p.seoDescription.length > 85 ? "..." : ""}` : "⚠️ Missing Meta Description"}
                             </div>
                             {p.seoDescription && (
-                              <div style={{ fontSize: "11px", color: isDescGood ? "#108043" : "#6d7175", marginTop: "2px" }}>
+                              <div style={{ fontSize: "11px", color: isDescGood ? "#108043" : "#6d7175", marginTop: "4px", fontWeight: "500" }}>
                                 {p.seoDescription.length} chars {isDescGood ? "✓" : ""}
                               </div>
                             )}
@@ -1059,33 +1091,34 @@ export default function BulkOptimizer() {
                               placeholder="comma, separated, keywords..."
                               style={{
                                 width: "100%",
-                                padding: "6px 8px",
+                                padding: "8px 10px",
                                 borderRadius: "6px",
-                                border: "1px solid #0284c7",
+                                border: "1.5px solid #0284c7",
                                 background: "#f0f9ff",
                                 fontSize: "12px",
                                 boxSizing: "border-box",
                                 fontFamily: "inherit",
+                                color: "#0f172a",
                               }}
                             />
                             <div style={{ fontSize: "11px", marginTop: "4px", color: "#0284c7", fontWeight: "600" }}>
-                              {(proposal.keywords || []).length} keywords &bull; comma-separated
+                              🏷️ {(proposal.keywords || []).length} keywords &bull; comma-separated
                             </div>
                           </div>
                         ) : (
                           <div>
                             {p.keywords && p.keywords.length > 0 ? (
                               <div>
-                                <div style={{ color: "#334155", fontSize: "12px", lineHeight: "1.4" }}>
+                                <div style={{ color: "#334155", fontSize: "12px", lineHeight: "1.4", fontWeight: "500" }}>
                                   {p.keywords.join(", ")}
                                 </div>
-                                <div style={{ fontSize: "11px", color: "#0284c7", marginTop: "2px", fontWeight: "600" }}>
+                                <div style={{ fontSize: "11px", color: "#0284c7", marginTop: "4px", fontWeight: "600" }}>
                                   ✓ {p.keywords.length} keywords saved
                                 </div>
                               </div>
                             ) : (
                               <div style={{ color: "#d9381e", fontSize: "12px", fontWeight: "600" }}>
-                                ❌ Missing Keywords
+                                ⚠️ Missing Keywords
                               </div>
                             )}
                           </div>
@@ -1096,15 +1129,29 @@ export default function BulkOptimizer() {
                       <td style={{ padding: "12px 14px", verticalAlign: "top", textAlign: "right" }}>
                         <span
                           style={{
-                            padding: "3px 8px",
-                            borderRadius: "10px",
+                            display: "inline-block",
+                            padding: "4px 10px",
+                            borderRadius: "12px",
                             fontSize: "11px",
-                            fontWeight: "600",
-                            background: proposal ? "#e0f2fe" : isTitleGood && isDescGood ? "#e3f8e0" : "#fff4e5",
-                            color: proposal ? "#0369a1" : isTitleGood && isDescGood ? "#108043" : "#b7791f",
+                            fontWeight: "700",
+                            background: proposal
+                              ? "#e0f2fe"
+                              : isTitleGood && isDescGood
+                              ? "#ecfdf5"
+                              : "#fffbeb",
+                            color: proposal
+                              ? "#0369a1"
+                              : isTitleGood && isDescGood
+                              ? "#065f46"
+                              : "#b45309",
+                            border: proposal
+                              ? "1px solid #bae6fd"
+                              : isTitleGood && isDescGood
+                              ? "1px solid #a7f3d0"
+                              : "1px solid #fde68a",
                           }}
                         >
-                          {proposal ? "Ready" : isTitleGood && isDescGood ? "Optimized" : "Needs Work"}
+                          {proposal ? "Ready" : isTitleGood && isDescGood ? "Optimized" : "Needs SEO"}
                         </span>
                       </td>
                     </tr>
@@ -1160,6 +1207,7 @@ export default function BulkOptimizer() {
           )}
         </div>
       </s-section>
+      </div>
     </s-page>
   );
 }

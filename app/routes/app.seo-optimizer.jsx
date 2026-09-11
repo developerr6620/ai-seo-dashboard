@@ -285,7 +285,23 @@ export default function SeoOptimizer() {
   };
 
   return (
-    <s-page heading="⚡ Single Product SEO & Keywords Optimizer">
+    <s-page full-width heading="⚡ Single Product SEO & Keywords Optimizer">
+      <style>{`
+        s-page {
+          display: block;
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        s-layout {
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+        s-layout-section {
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+      `}</style>
+      <div style={{ width: "100%", maxWidth: "100%", margin: "0 auto", padding: "0 12px", boxSizing: "border-box" }}>
       <s-layout>
         <s-layout-section>
           <s-stack direction="block" gap="large">
@@ -695,14 +711,44 @@ export default function SeoOptimizer() {
               </>
             ) : (
               <s-box padding="base" borderWidth="base" borderRadius="base">
-                <div style={{ textAlign: "center", padding: "48px 20px" }}>
-                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>🔍</div>
-                  <div style={{ fontSize: "18px", fontWeight: "700", color: "#1e293b", marginBottom: "8px" }}>
+                <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
+                  <div style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a", marginBottom: "8px" }}>
                     No Product Selected
                   </div>
-                  <div style={{ fontSize: "14px", color: "#64748b", maxWidth: "480px", margin: "0 auto", lineHeight: "1.6" }}>
-                    Please search and select a product in <strong>Step 1</strong> above to generate AI target keywords, optimize SEO title &amp; description, and preview live Google search results.
+                  <div style={{ fontSize: "14px", color: "#64748b", maxWidth: "500px", margin: "0 auto 20px auto", lineHeight: "1.6" }}>
+                    Search and select a product in <strong>Step 1</strong> above, or click one of the quick picks below to start optimizing its SEO title, description, and keywords.
                   </div>
+
+                  {products.length > 0 && (
+                    <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+                      <div style={{ fontSize: "12px", fontWeight: "600", color: "#64748b", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        ⚡ Quick Select a Product:
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+                        {products.slice(0, 5).map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => selectProduct(p)}
+                            style={{
+                              background: "#f8fafc",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "20px",
+                              padding: "6px 14px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              color: "#1e293b",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            🛍️ {p.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </s-box>
             )}
@@ -757,6 +803,7 @@ export default function SeoOptimizer() {
           </s-stack>
         </s-layout-section>
       </s-layout>
+      </div>
 
       {/* Loading Overlay */}
       {isPageLoading && (
