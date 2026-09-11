@@ -303,6 +303,18 @@ export function extractKeywords({
     }
   }
 
+  // 5. If we have fewer than 6 keywords (e.g. short SKU, model names like "UC97386", or minimal descriptions):
+  if (cleanTitle && keywordsSet.size < 6) {
+    const base = cleanTitle.toLowerCase();
+    keywordsSet.add(`buy ${base}`);
+    keywordsSet.add(`${base} online`);
+    keywordsSet.add(`shop ${base}`);
+    keywordsSet.add(`${base} store`);
+    keywordsSet.add(`best ${base}`);
+    keywordsSet.add(`${base} price`);
+    keywordsSet.add(`original ${base}`);
+  }
+
   // Filter out single character, too long, or numeric-only phrases
   const filtered = Array.from(keywordsSet)
     .map((k) => k.trim())
@@ -316,9 +328,11 @@ export function generateSeoCopy(options = {}) {
   let { keywords, keyword } = options;
   let parsedKeywords = keywordList(keyword, keywords);
 
-  // Auto-extract keywords if none were provided
-  if (parsedKeywords.length === 0 && options.productTitle) {
-    parsedKeywords = extractKeywords(options);
+  // Auto-extract keywords if none were provided OR if only 1-2 minimal keywords exist
+  if (parsedKeywords.length < 3 && options.productTitle) {
+    const extracted = extractKeywords(options);
+    const combined = Array.from(new Set([...parsedKeywords, ...extracted]));
+    parsedKeywords = combined.slice(0, 8);
   }
 
   return {

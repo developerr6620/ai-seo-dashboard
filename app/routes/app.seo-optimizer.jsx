@@ -4,6 +4,7 @@ import { useLoaderData, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
 import {
   DESC_MAX,
   TITLE_MAX,
@@ -26,7 +27,11 @@ function parseMetafieldKeywords(rawVal) {
 }
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session?.shop || "";
+
+  // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
+  await ensureKeywordsMetafieldDefinition(admin, shop);
 
   try {
     const response = await admin.graphql(
@@ -113,7 +118,17 @@ export default function SeoOptimizer() {
     setSearchQuery(prod.title);
     setSeoTitle(prod.seoTitle);
     setSeoDescription(prod.seoDescription);
-    setKeywordsList(prod.keywords || []);
+
+    // Automatically generate keywords if product has none or fewer than 3 keywords
+    let initialKeywords = prod.keywords || [];
+    if (initialKeywords.length < 3 && prod.title) {
+      const autoExtracted = extractKeywords({
+        productTitle: prod.title,
+        productDescription: prod.description,
+      });
+      initialKeywords = Array.from(new Set([...initialKeywords, ...autoExtracted])).slice(0, 8);
+    }
+    setKeywordsList(initialKeywords);
     setIsDropdownOpen(false);
     setFeedbackMessage(null);
   };
@@ -175,20 +190,17 @@ export default function SeoOptimizer() {
     setIsGenerating(true);
 
     setTimeout(() => {
-      let activeKeywords = keywordsList;
-      // Auto-extract keywords if currently empty
-      if (activeKeywords.length === 0) {
-        activeKeywords = extractKeywords({
-          productTitle: selectedProduct.title,
-          productDescription: selectedProduct.description,
-        });
-        setKeywordsList(activeKeywords);
-      }
+      // Auto-generate fresh high-converting keywords from product data
+      const generatedKeywords = extractKeywords({
+        productTitle: selectedProduct.title,
+        productDescription: selectedProduct.description,
+      });
+      setKeywordsList(generatedKeywords);
 
       const generated = generateSeoCopy({
         productTitle: selectedProduct.title,
         productDescription: selectedProduct.description,
-        keywords: activeKeywords,
+        keywords: generatedKeywords,
         tone,
       });
 
@@ -197,9 +209,9 @@ export default function SeoOptimizer() {
       setIsGenerating(false);
       setFeedbackMessage({
         type: "info",
-        text: "✨ Generated 1 best SEO recommendation and target keywords! Review below, then click 'Save to Shopify Store'.",
+        text: `✨ Generated SEO Title, Meta Description, and ${generatedKeywords.length} Target Keywords! Review below, then click 'Save SEO & Keywords to Shopify Store'.`,
       });
-      if (shopify?.toast) shopify.toast.show("✨ Generated best SEO content & keywords!");
+      if (shopify?.toast) shopify.toast.show(`✨ Generated SEO & ${generatedKeywords.length} Target Keywords!`);
     }, 300);
   };
 
@@ -486,7 +498,7 @@ export default function SeoOptimizer() {
                     disabled={isGenerating}
                     {...(isGenerating ? { loading: true } : {})}
                   >
-                    {isGenerating ? "✨ Generating AI SEO & Keywords..." : `✨ Generate SEO (Title ≤ ${TITLE_MAX} / Description ≤ ${DESC_MAX})`}
+                    {isGenerating ? "✨ Generating AI SEO & Keywords..." : `✨ Generate AI SEO & Keywords (Title ≤ ${TITLE_MAX} / Description ≤ ${DESC_MAX})`}
                   </s-button>
                 </s-stack>
               </s-box>

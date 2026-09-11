@@ -4,10 +4,14 @@ import { useLoaderData, Link, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getStoreAuditStats } from "../lib/storeAudit.server";
+import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shopName = session?.shop || "";
+
+  // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
+  await ensureKeywordsMetafieldDefinition(admin, shopName);
 
   try {
     // 1. Fetch store info, exact total products count, and sample products

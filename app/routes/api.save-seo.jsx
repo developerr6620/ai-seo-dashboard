@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { enforceSeoLimits } from "../lib/seoCopy";
 import { updateAuditStatsOnSave } from "../lib/storeAudit.server";
+import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
 
 function formatKeywords(raw) {
   if (!raw) return [];
@@ -14,6 +15,9 @@ function formatKeywords(raw) {
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session?.shop;
+
+  // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
+  await ensureKeywordsMetafieldDefinition(admin, shop);
 
   try {
     const data = await request.json();

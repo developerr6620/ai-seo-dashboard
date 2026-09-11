@@ -3,10 +3,12 @@ import { useState, useMemo, useEffect } from "react";
 import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
 import {
   DESC_MAX,
   TITLE_MAX,
   generateSeoCopy,
+  extractKeywords,
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
@@ -24,7 +26,12 @@ function parseMetafieldKeywords(rawVal) {
 }
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session?.shop || "";
+
+  // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
+  await ensureKeywordsMetafieldDefinition(admin, shop);
+
   const url = new URL(request.url);
   const pageParam = url.searchParams.get("page");
   const cursorParam = url.searchParams.get("cursor");
@@ -346,17 +353,29 @@ export default function BulkOptimizer() {
       // Simulate AI generation delay for realistic progress feel
       await new Promise((resolve) => setTimeout(resolve, 80));
 
+      let productKeywords = kwList;
+      if (productKeywords.length === 0) {
+        if (p.keywords && p.keywords.length >= 3) {
+          productKeywords = p.keywords;
+        } else {
+          productKeywords = extractKeywords({
+            productTitle: p.title,
+            productDescription: p.description,
+          });
+        }
+      }
+
       const copy = generateSeoCopy({
         productTitle: p.title,
         productDescription: p.description,
-        keywords: kwList.length > 0 ? kwList : p.keywords,
+        keywords: productKeywords,
         tone,
       });
 
       newProposals[p.id] = {
         seoTitle: copy.title,
         seoDescription: copy.description,
-        keywords: copy.keywords || kwList || p.keywords || [],
+        keywords: copy.keywords || productKeywords || [],
         isReviewed: true,
       };
 
