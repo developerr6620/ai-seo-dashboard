@@ -274,6 +274,28 @@ export default function BulkOptimizer() {
   const [proposedUpdates, setProposedUpdates] = useState({}); // { [productId]: { seoTitle, seoDescription } }
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [isSyncingMeta, setIsSyncingMeta] = useState(false);
+
+  // Sync Metafield Definition to Multiline Text
+  const handleSyncMetafield = async () => {
+    setIsSyncingMeta(true);
+    try {
+      const res = await fetch("/api/sync-metafield", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setToastMessage("✅ Metafield definition successfully synced to multiline text!");
+      } else {
+        alert(
+          data.result?.error ||
+            "Shopify could not delete old definition automatically. If the definition is locked, go to Shopify Admin -> Settings -> Custom data -> Products -> Target SEO Keywords -> click Delete, then click this button again."
+        );
+      }
+    } catch (e) {
+      alert("Error contacting sync API: " + e.message);
+    } finally {
+      setIsSyncingMeta(false);
+    }
+  };
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -569,6 +591,24 @@ export default function BulkOptimizer() {
             {/* Action Buttons */}
             <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
               <button
+                type="button"
+                onClick={handleSyncMetafield}
+                disabled={isSyncingMeta}
+                style={{
+                  background: "rgba(255, 255, 255, 0.15)",
+                  border: "1px solid rgba(255, 255, 255, 0.3)",
+                  color: "#ffffff",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  cursor: isSyncingMeta ? "wait" : "pointer",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                }}
+              >
+                {isSyncingMeta ? "⏳ Syncing..." : "🔄 Force Sync Metafield"}
+              </button>
+
+              <button
                 onClick={handleStartBulkGeneration}
                 disabled={isBulkGenerating || selectedIds.size === 0}
                 style={{
@@ -845,9 +885,10 @@ export default function BulkOptimizer() {
               <thead>
                 <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e1e3e5", color: "#6d7175", textAlign: "left" }}>
                   <th style={{ padding: "10px 14px", width: "36px" }}></th>
-                  <th style={{ padding: "10px 14px", width: "20%" }}>Product</th>
-                  <th style={{ padding: "10px 14px", width: "35%" }}>SEO Title</th>
-                  <th style={{ padding: "10px 14px", width: "35%" }}>Meta Description</th>
+                  <th style={{ padding: "10px 14px", width: "18%" }}>Product</th>
+                  <th style={{ padding: "10px 14px", width: "23%" }}>SEO Title</th>
+                  <th style={{ padding: "10px 14px", width: "25%" }}>Meta Description</th>
+                  <th style={{ padding: "10px 14px", width: "24%" }}>Target Keywords</th>
                   <th style={{ padding: "10px 14px", width: "10%", textAlign: "right" }}>Status</th>
                 </tr>
               </thead>
@@ -998,6 +1039,53 @@ export default function BulkOptimizer() {
                             {p.seoDescription && (
                               <div style={{ fontSize: "11px", color: isDescGood ? "#108043" : "#6d7175", marginTop: "2px" }}>
                                 {p.seoDescription.length} chars {isDescGood ? "✓" : ""}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Target Keywords (Editable if proposed) */}
+                      <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                        {proposal ? (
+                          <div>
+                            <textarea
+                              rows={2}
+                              value={Array.isArray(proposal.keywords) ? proposal.keywords.join(", ") : String(proposal.keywords || "")}
+                              onChange={(e) => {
+                                const list = e.target.value.split(",").map((k) => k.trim()).filter(Boolean);
+                                handleEditProposal(p.id, "keywords", list);
+                              }}
+                              placeholder="comma, separated, keywords..."
+                              style={{
+                                width: "100%",
+                                padding: "6px 8px",
+                                borderRadius: "6px",
+                                border: "1px solid #0284c7",
+                                background: "#f0f9ff",
+                                fontSize: "12px",
+                                boxSizing: "border-box",
+                                fontFamily: "inherit",
+                              }}
+                            />
+                            <div style={{ fontSize: "11px", marginTop: "4px", color: "#0284c7", fontWeight: "600" }}>
+                              {(proposal.keywords || []).length} keywords &bull; comma-separated
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            {p.keywords && p.keywords.length > 0 ? (
+                              <div>
+                                <div style={{ color: "#334155", fontSize: "12px", lineHeight: "1.4" }}>
+                                  {p.keywords.join(", ")}
+                                </div>
+                                <div style={{ fontSize: "11px", color: "#0284c7", marginTop: "2px", fontWeight: "600" }}>
+                                  ✓ {p.keywords.length} keywords saved
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ color: "#d9381e", fontSize: "12px", fontWeight: "600" }}>
+                                ❌ Missing Keywords
                               </div>
                             )}
                           </div>

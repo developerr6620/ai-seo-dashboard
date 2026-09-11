@@ -1,6 +1,11 @@
 // In-memory cache of shops where the metafield definition has been verified
 const verifiedShops = new Set();
 
+export function clearVerifiedShops(shop = "") {
+  if (shop) verifiedShops.delete(shop);
+  else verifiedShops.clear();
+}
+
 /**
  * Ensures the "Target SEO Keywords" Product Metafield Definition
  * is created and pinned in the merchant's Shopify store.
@@ -45,14 +50,14 @@ export async function ensureKeywordsMetafieldDefinition(admin, shop = "") {
     }
 
     // If definition exists but is NOT multi_line_text_field (e.g. legacy list.single_line_text_field),
-    // delete the old definition so we can recreate it with multi_line_text_field
+    // attempt deletion so we can recreate it with multi_line_text_field
     if (existing && existing.type?.name !== "multi_line_text_field") {
       console.log(
         `[MetafieldDefinition] Found legacy definition type "${existing.type?.name}". Deleting to migrate to multi_line_text_field...`
       );
       const deleteMutation = `#graphql
         mutation DeleteMetafieldDefinition($id: ID!) {
-          metafieldDefinitionDelete(id: $id, deleteAllAssociatedMetafields: false) {
+          metafieldDefinitionDelete(id: $id, deleteAllAssociatedMetafields: true) {
             deletedDefinitionId
             userErrors {
               field
@@ -61,7 +66,22 @@ export async function ensureKeywordsMetafieldDefinition(admin, shop = "") {
           }
         }
       `;
-      await admin.graphql(deleteMutation, { variables: { id: existing.id } });
+      const delRes = await admin.graphql(deleteMutation, { variables: { id: existing.id } });
+      const delJson = await delRes.json();
+      console.log("[MetafieldDefinition] Delete result:", JSON.stringify(delJson));
+      const delErrors = delJson?.data?.metafieldDefinitionDelete?.userErrors || [];
+      if (delErrors.length > 0) {
+        const errMsg = delErrors.map((e) => e.message).join("; ");
+        console.warn("[MetafieldDefinition] Could not delete old definition:", errMsg);
+        return {
+          success: false,
+          needsManualDelete: true,
+          error: `Shopify blocked automated deletion of the old list metafield: "${errMsg}". In your Shopify Admin, go to Settings -> Custom data -> Products -> "Target SEO Keywords" and click Delete. Then click 'Force Sync Metafield'.`,
+        };
+      }
+
+      // Wait 1.5 seconds for Shopify background processing
+      await new Promise((r) => setTimeout(r, 1500));
     }
 
     // 2. Create the multi_line_text_field definition
@@ -115,8 +135,24 @@ export async function ensureKeywordsMetafieldDefinition(admin, shop = "") {
       );
 
       if (isAlreadyTaken) {
-        if (shop) verifiedShops.add(shop);
-        return { success: true, alreadyExisted: true };
+        // Re-check existing definitions to see if it actually became multi_line_text_field
+        const recheckRes = await admin.graphql(checkQuery);
+        const recheckJson = await recheckRes.json();
+        const recheckEdges = recheckJson?.data?.metafieldDefinitions?.edges || [];
+        const currentDef = recheckEdges.find(
+          (e) => e.node?.namespace === "seo" && e.node?.key === "keywords"
+        )?.node;
+
+        if (currentDef?.type?.name === "multi_line_text_field") {
+          if (shop) verifiedShops.add(shop);
+          return { success: true, alreadyExisted: true, id: currentDef.id, type: "multi_line_text_field" };
+        }
+
+        return {
+          success: false,
+          needsManualDelete: true,
+          error: `The metafield definition in your store is still registered as "${currentDef?.type?.name || "list"}". Please open Shopify Admin -> Settings -> Custom data -> Products -> "Target SEO Keywords", click Delete, then click 'Force Sync Metafield'.`,
+        };
       }
 
       // Retry without access/pin if rejected
@@ -140,10 +176,7 @@ export async function ensureKeywordsMetafieldDefinition(admin, shop = "") {
         });
         const fallbackJson = await fallbackRes.json();
         const fallbackErrors = fallbackJson?.data?.metafieldDefinitionCreate?.userErrors || [];
-        if (
-          fallbackErrors.length === 0 ||
-          fallbackErrors.some((e) => e.code === "TAKEN")
-        ) {
+        if (fallbackErrors.length === 0) {
           if (shop) verifiedShops.add(shop);
           return {
             success: true,
