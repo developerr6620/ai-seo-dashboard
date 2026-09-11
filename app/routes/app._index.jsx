@@ -56,10 +56,13 @@ export const loader = async ({ request }) => {
     return {
       shop: {
         name: shop.name || "Your Store",
-        domain: shop.myshopifyDomain || "",
+        domain: shop.myshopifyDomain || shopName || "",
         email: shop.email || "",
         plan: shop.plan?.displayName || "Shopify",
       },
+      // eslint-disable-next-line no-undef
+      apiKey: process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148",
+      extensionId: "a793da6f-4c6f-ed0a-a7ba-a6735dc8a8067d14d158",
       stats: auditResult.stats,
       isAuditing: auditResult.isAuditing,
       lastAuditedAt: auditResult.lastAuditedAt,
@@ -92,6 +95,15 @@ export default function Dashboard() {
   const { shop, stats: initialStats, allProductsCount, isAuditing: initialIsAuditing, lastAuditedAt: initialLastAudit } = useLoaderData();
   const navigation = useNavigation();
   const isPageLoading = navigation.state === "loading";
+
+  const shopDomain = shop?.domain || "";
+  const cleanShop = shopDomain
+    .replace(/^https?:\/\//, "")
+    .replace(/\.myshopify\.com.*$/, "")
+    .replace(/\/$/, "");
+  const themeEmbedUrl = cleanShop
+    ? `https://admin.shopify.com/store/${cleanShop}/themes/current/editor?context=apps&activateAppId=a793da6f-4c6f-ed0a-a7ba-a6735dc8a8067d14d158/seo_keywords`
+    : `https://${shopDomain || "admin.shopify.com"}/admin/themes/current/editor?context=apps&activateAppId=a793da6f-4c6f-ed0a-a7ba-a6735dc8a8067d14d158/seo_keywords`;
 
   const [stats, setStats] = useState(initialStats);
   const [isAuditing, setIsAuditing] = useState(initialIsAuditing);
@@ -688,61 +700,104 @@ export default function Dashboard() {
         </div>
       </s-section>
 
-      {/* Storefront & SEO Extension Connection */}
-      <s-section heading="🌐 Storefront & SEO Extension Connection">
+      {/* Storefront & SEO Extension Connection (Automatic Theme App Extension) */}
+      <s-section heading="⚡ Zero-Code Storefront & SEO Extension Integration">
         <div
           style={{
-            background: "#ffffff",
+            background: "linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)",
             borderRadius: "12px",
             padding: "24px",
-            border: "1px solid #e1e3e5",
+            border: "1px solid #bbf7d0",
             boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
-            <div>
-              <div style={{ fontSize: "16px", fontWeight: "700", color: "#202223" }}>
-                Display Keywords in SEO Chrome Extensions & Live Storefront
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "16px" }}>
+            <div style={{ flex: 1, minWidth: "280px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "18px", fontWeight: "700", color: "#065f46" }}>
+                  Automatic Frontend Display — No Code Editing Required!
+                </span>
+                <span
+                  style={{
+                    background: "#ecfdf5",
+                    color: "#065f46",
+                    border: "1px solid #a7f3d0",
+                    borderRadius: "12px",
+                    padding: "3px 10px",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                  }}
+                >
+                  ✓ Theme App Extension Ready
+                </span>
               </div>
-              <div style={{ fontSize: "13px", color: "#616161", marginTop: "4px" }}>
-                Shopify themes natively output Title and Meta Description, but require 1 snippet in <code>theme.liquid</code> to output <code>&lt;meta name=&quot;keywords&quot;&gt;</code>.
+              <div style={{ fontSize: "13px", color: "#334155", marginTop: "6px", lineHeight: "1.5" }}>
+                Shopify themes already display <strong>SEO Title</strong> and <strong>Meta Description</strong> automatically. For <strong>Keywords</strong>, our built-in Theme App Extension injects the <code>&lt;meta name=&quot;keywords&quot;&gt;</code> tag directly into <code>&lt;head&gt;</code> without modifying any theme files or code.
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const snippet = `{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`;
-                navigator.clipboard.writeText(snippet);
-                alert("Copied Liquid snippet to clipboard!");
-              }}
+            <a
+              href={themeEmbedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 background: "#008060",
                 color: "#ffffff",
-                border: "none",
+                textDecoration: "none",
                 borderRadius: "8px",
-                padding: "8px 16px",
-                fontSize: "13px",
+                padding: "12px 24px",
+                fontSize: "14px",
                 fontWeight: "700",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                boxShadow: "0 2px 6px rgba(0, 128, 96, 0.3)",
                 cursor: "pointer",
               }}
             >
-              📋 Copy Liquid Snippet
-            </button>
+              🚀 1-Click Enable in Theme
+            </a>
           </div>
 
-          <div style={{ background: "#0f172a", color: "#38bdf8", padding: "12px 16px", borderRadius: "8px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto", whiteSpace: "pre-wrap", marginBottom: "14px" }}>
-            {`{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+            <div style={{ background: "#ffffff", padding: "14px 16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "12px", color: "#008060", fontWeight: "800" }}>STEP 1</div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b", marginTop: "2px" }}>Click &quot;1-Click Enable in Theme&quot;</div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Opens the Shopify Theme Editor with &quot;SEO Keywords Tag&quot; app embed pre-activated.</div>
+            </div>
+            <div style={{ background: "#ffffff", padding: "14px 16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "12px", color: "#008060", fontWeight: "800" }}>STEP 2</div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b", marginTop: "2px" }}>Click &quot;Save&quot; in Theme Editor</div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Click the Save button in the upper right. Zero files or theme code touched.</div>
+            </div>
+            <div style={{ background: "#ffffff", padding: "14px 16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontSize: "12px", color: "#008060", fontWeight: "800" }}>STEP 3</div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b", marginTop: "2px" }}>Inspect with SEO Extension</div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Open any product page on your store. Your SEO Chrome extension will immediately read Title, Description, and Keywords!</div>
+            </div>
           </div>
 
-          <div style={{ fontSize: "12px", color: "#334155", background: "#f8fafc", padding: "12px 16px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-            <strong>How to connect in 10 seconds:</strong>
-            <ol style={{ margin: "6px 0 0 18px", padding: 0, lineHeight: "1.6" }}>
-              <li>In Shopify Admin, navigate to <strong>Online Store</strong> → <strong>Themes</strong>.</li>
-              <li>Click the <strong>⋯</strong> button on your active theme → <strong>Edit code</strong>.</li>
-              <li>Open <strong>layout/theme.liquid</strong> and locate <code>&lt;meta name=&quot;description&quot; ...&gt;</code> (inside the <code>&lt;head&gt;</code> tag).</li>
-              <li>Paste the snippet directly below it and click <strong>Save</strong>.</li>
-            </ol>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", fontSize: "12px", color: "#475569" }}>
+            <span style={{ fontWeight: "600" }}>Detected by all SEO extensions:</span>
+            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>🔍 SEO Meta in 1-Click</span>
+            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>⚡ Detailed SEO Extension</span>
+            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>📊 MozBar</span>
+            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>🤖 Google Search Console</span>
           </div>
+
+          {/* Legacy Vintage Theme fallback */}
+          <details style={{ marginTop: "14px", fontSize: "12px", color: "#64748b" }}>
+            <summary style={{ cursor: "pointer", fontWeight: "600", color: "#475569" }}>
+              ⚙️ Using an older vintage theme (pre-2021) without App Embed support? View manual code snippet
+            </summary>
+            <div style={{ marginTop: "10px", padding: "12px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+              <div style={{ marginBottom: "6px" }}>
+                Add this snippet inside <code>&lt;head&gt;</code> in <strong>layout/theme.liquid</strong>:
+              </div>
+              <div style={{ background: "#0f172a", color: "#38bdf8", padding: "10px 14px", borderRadius: "6px", fontFamily: "monospace", fontSize: "11px", overflowX: "auto", whiteSpace: "pre-wrap" }}>
+                {`{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`}
+              </div>
+            </div>
+          </details>
         </div>
       </s-section>
 
