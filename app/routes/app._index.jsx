@@ -800,6 +800,33 @@ export default function Dashboard() {
             </button>
           </Link>
 
+          {/* Image ALT Text Optimizer */}
+          <Link to="/app/image-alt-optimizer" style={{ textDecoration: "none" }}>
+            <button
+              type="button"
+              style={{
+                background: "linear-gradient(135deg, #2563eb 0%, #1e40af 100%)",
+                borderRadius: "12px",
+                padding: "24px",
+                cursor: "pointer",
+                color: "#ffffff",
+                boxShadow: "0 4px 14px rgba(37, 99, 235, 0.35)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                width: "100%",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontSize: "28px", marginBottom: "10px" }}>🖼️</div>
+              <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>Image ALT Optimizer</div>
+              <div style={{ fontSize: "13px", opacity: 0.85, lineHeight: "1.4" }}>
+                AI-generate and bulk-apply descriptive, accessible ALT text for product images.
+              </div>
+              <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: "#93c5fd" }}>
+                Optimize Images Now →
+              </div>
+            </button>
+          </Link>
+
           {/* Missing SEO Alert */}
           <div
             style={{

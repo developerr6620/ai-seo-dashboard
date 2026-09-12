@@ -13,6 +13,12 @@ import {
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
+import {
+  ALT_MAX,
+  isAltOk,
+  generateImageAltText,
+  getImageViewLabel,
+} from "../lib/imageAltCopy";
 
 function parseMetafieldKeywords(rawVal) {
   if (!rawVal) return [];
@@ -39,15 +45,19 @@ function parseMetafieldKeywords(rawVal) {
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  const shop = session?.shop || "";
+  const shopName = session?.shop || "";
 
   // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
-  await ensureKeywordsMetafieldDefinition(admin, shop);
+  await ensureKeywordsMetafieldDefinition(admin, shopName);
 
   try {
     const response = await admin.graphql(
       `#graphql
       query getProducts {
+        shop {
+          name
+          myshopifyDomain
+        }
         products(first: 250) {
           edges {
             node {
@@ -56,12 +66,33 @@ export const loader = async ({ request }) => {
               handle
               description
               status
+              vendor
               seo {
                 title
                 description
               }
               keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                 value
+              }
+              media(first: 20) {
+                nodes {
+                  id
+                  alt
+                  mediaContentType
+                  status
+                  preview {
+                    image {
+                      url
+                      width
+                      height
+                    }
+                  }
+                  ... on MediaImage {
+                    image {
+                      url
+                    }
+                  }
+                }
               }
             }
           }
@@ -70,23 +101,39 @@ export const loader = async ({ request }) => {
     );
 
     const data = await response.json();
+    const shop = data?.data?.shop || { name: shopName || "Your Store" };
     const rawProducts = data?.data?.products?.edges?.map((edge) => edge.node) || [];
 
-    const products = rawProducts.map((p) => ({
-      id: String(p.id || ""),
-      title: String(p.title || "Untitled Product"),
-      handle: String(p.handle || "product"),
-      description: String(p.description || ""),
-      status: String(p.status || "ACTIVE"),
-      seoTitle: String(p.seo?.title || p.title || ""),
-      seoDescription: String(p.seo?.description || ""),
-      keywords: parseMetafieldKeywords(p.keywordsMetafield?.value),
-    }));
+    const products = rawProducts.map((p) => {
+      const mediaNodes = (p.media?.nodes || [])
+        .filter((m) => m.mediaContentType === "IMAGE" || !m.mediaContentType)
+        .map((m) => ({
+          id: m.id,
+          alt: m.alt || "",
+          url: m.preview?.image?.url || m.image?.url || "",
+          width: m.preview?.image?.width || null,
+          height: m.preview?.image?.height || null,
+        }))
+        .filter((m) => Boolean(m.url));
 
-    return { products, hasMore: rawProducts.length === 250 };
+      return {
+        id: String(p.id || ""),
+        title: String(p.title || "Untitled Product"),
+        handle: String(p.handle || "product"),
+        description: String(p.description || ""),
+        status: String(p.status || "ACTIVE"),
+        vendor: String(p.vendor || shop.name || ""),
+        seoTitle: String(p.seo?.title || p.title || ""),
+        seoDescription: String(p.seo?.description || ""),
+        keywords: parseMetafieldKeywords(p.keywordsMetafield?.value),
+        media: mediaNodes,
+      };
+    });
+
+    return { shop, products, hasMore: rawProducts.length === 250 };
   } catch (error) {
     console.error("Error loading products:", error);
-    return { products: [], hasMore: false };
+    return { shop: { name: shopName || "Your Store" }, products: [], hasMore: false };
   }
 };
 
@@ -126,6 +173,10 @@ export default function SeoOptimizer() {
   const [feedbackMessage, setFeedbackMessage] = useState(null);
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
 
+  // Image ALT Text state
+  const [imageDrafts, setImageDrafts] = useState({});
+  const [isSavingImages, setIsSavingImages] = useState(false);
+
   // Sync Metafield Definition to Multiline Text
   const handleSyncMetafield = async () => {
     setIsSyncingMeta(true);
@@ -164,6 +215,14 @@ export default function SeoOptimizer() {
       initialKeywords = Array.from(new Set([...initialKeywords, ...autoExtracted])).slice(0, 8);
     }
     setKeywordsList(initialKeywords);
+
+    // Initialize Image ALT text drafts
+    const initialDrafts = {};
+    (prod.media || []).forEach((m) => {
+      initialDrafts[m.id] = m.alt || "";
+    });
+    setImageDrafts(initialDrafts);
+
     setIsDropdownOpen(false);
     setFeedbackMessage(null);
   };
@@ -174,8 +233,67 @@ export default function SeoOptimizer() {
     setSeoTitle("");
     setSeoDescription("");
     setKeywordsList([]);
+    setImageDrafts({});
     setFeedbackMessage(null);
     setIsDropdownOpen(false);
+  };
+
+  // Generate AI Image ALTs for current selected product
+  const handleGenerateImageAlts = () => {
+    if (!selectedProduct) return;
+    const newDrafts = {};
+    (selectedProduct.media || []).forEach((m, idx) => {
+      newDrafts[m.id] = generateImageAltText({
+        productTitle: selectedProduct.title,
+        keyword: keywordsList[idx % (keywordsList.length || 1)] || "",
+        keywords: keywordsList,
+        brand: selectedProduct.vendor,
+        storeName: loaderData?.shop?.name || "",
+        imageIndex: idx,
+        totalImages: selectedProduct.media.length,
+      });
+    });
+    setImageDrafts((prev) => ({ ...prev, ...newDrafts }));
+    if (shopify?.toast) shopify.toast.show("✨ Generated Image ALT texts!");
+  };
+
+  // Save Image ALTs for current selected product
+  const handleSaveImageAlts = async () => {
+    if (!selectedProduct || !selectedProduct.media?.length) return;
+    setIsSavingImages(true);
+    try {
+      const mediaToUpdate = selectedProduct.media.map((m) => ({
+        id: m.id,
+        alt: (imageDrafts[m.id] !== undefined ? imageDrafts[m.id] : m.alt || "").trim(),
+      }));
+
+      const res = await fetch("/api/save-image-alt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: selectedProduct.id,
+          media: mediaToUpdate,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setSelectedProduct((prev) => ({
+          ...prev,
+          media: prev.media.map((m) => {
+            const upd = mediaToUpdate.find((u) => u.id === m.id);
+            return upd ? { ...m, alt: upd.alt } : m;
+          }),
+        }));
+        if (shopify?.toast) shopify.toast.show("✓ Image ALT texts saved to Shopify!");
+      } else {
+        alert("Failed to save image ALTs: " + (data.error || "Unknown error"));
+      }
+    } catch (e) {
+      alert("Error saving image ALTs: " + e.message);
+    } finally {
+      setIsSavingImages(false);
+    }
   };
 
   const seoAnalysis = useMemo(() => {
@@ -731,6 +849,209 @@ export default function SeoOptimizer() {
                     >
                       {isSaving ? "Saving to Shopify..." : "💾 Save SEO & Keywords to Shopify Store"}
                     </s-button>
+                  </s-stack>
+                </s-box>
+
+                {/* STEP 4: IMAGE ALT TEXT OPTIMIZATION */}
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-stack direction="block" gap="base">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                      <div>
+                        <div style={{ fontSize: "16px", fontWeight: "700", color: "#202223" }}>
+                          Step 4: Optimize Product Images ALT Text
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#6d7175", marginTop: "2px" }}>
+                          Generate accessible, keyword-rich image descriptions for Google Images & Screen Readers.
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <Link
+                          to="/app/image-alt-optimizer"
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: "700",
+                            color: "#2563eb",
+                            background: "#eff6ff",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            border: "1px solid #bfdbfe",
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          Open Catalog Image ALT Workbench →
+                        </Link>
+                      </div>
+                    </div>
+
+                    {(!selectedProduct.media || selectedProduct.media.length === 0) ? (
+                      <div style={{ padding: "16px", background: "#f8fafc", borderRadius: "8px", color: "#64748b", fontSize: "13px" }}>
+                        ℹ️ No product images found in Shopify for this item.
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", background: "#f1f5f9", padding: "10px 14px", borderRadius: "8px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: "700", color: "#334155" }}>
+                            🖼️ {selectedProduct.media.length} Product Images
+                          </span>
+
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                              type="button"
+                              onClick={handleGenerateImageAlts}
+                              style={{
+                                background: "#ffffff",
+                                border: "1px solid #cbd5e1",
+                                color: "#2563eb",
+                                borderRadius: "6px",
+                                padding: "5px 12px",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                              }}
+                            >
+                              ✨ Auto-Generate All Images
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isSavingImages}
+                              onClick={handleSaveImageAlts}
+                              style={{
+                                background: isSavingImages ? "#94a3b8" : "#16a34a",
+                                color: "#ffffff",
+                                border: "none",
+                                borderRadius: "6px",
+                                padding: "5px 14px",
+                                fontSize: "12px",
+                                fontWeight: "700",
+                                cursor: isSavingImages ? "wait" : "pointer",
+                              }}
+                            >
+                              {isSavingImages ? "Saving..." : "💾 Save Image ALTs"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                          {selectedProduct.media.map((m, idx) => {
+                            const val = imageDrafts[m.id] !== undefined ? imageDrafts[m.id] : m.alt || "";
+                            const len = val.length;
+                            const isMissing = !val.trim();
+                            const isOptimal = isAltOk(val);
+                            const viewLabel = getImageViewLabel(idx, selectedProduct.media.length);
+
+                            return (
+                              <div
+                                key={m.id}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px",
+                                  padding: "10px 12px",
+                                  background: "#ffffff",
+                                  border: `1px solid ${isMissing ? "#fdba74" : "#e2e8f0"}`,
+                                  borderRadius: "8px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: "48px",
+                                    height: "48px",
+                                    borderRadius: "6px",
+                                    overflow: "hidden",
+                                    border: "1px solid #cbd5e1",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <img
+                                    src={m.url}
+                                    alt={val || "thumbnail"}
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
+                                </div>
+
+                                <div style={{ minWidth: "90px" }}>
+                                  <div style={{ fontSize: "12px", fontWeight: "800", color: "#0f172a" }}>
+                                    #{idx + 1}
+                                  </div>
+                                  <div style={{ fontSize: "11px", color: "#64748b" }}>
+                                    {viewLabel || "Main"}
+                                  </div>
+                                </div>
+
+                                <div style={{ flex: 1, minWidth: "220px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                                    <span style={{ fontSize: "11px", fontWeight: "600", color: "#475569" }}>
+                                      ALT Text:
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: "11px",
+                                        fontWeight: "700",
+                                        color: isMissing ? "#ea580c" : isOptimal ? "#16a34a" : "#dc2626",
+                                      }}
+                                    >
+                                      {isMissing ? "⚠️ Empty" : `${len} / ${ALT_MAX} chars ${isOptimal ? "✓" : "(Too long)"}`}
+                                    </span>
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onChange={(e) =>
+                                      setImageDrafts((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                    }
+                                    placeholder="Enter descriptive ALT text..."
+                                    style={{
+                                      width: "100%",
+                                      padding: "6px 10px",
+                                      fontSize: "12px",
+                                      borderRadius: "6px",
+                                      border: "1px solid #cbd5e1",
+                                      boxSizing: "border-box",
+                                      outline: "none",
+                                    }}
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const suggested = generateImageAltText({
+                                      productTitle: selectedProduct.title,
+                                      keyword: keywordsList[idx % (keywordsList.length || 1)] || "",
+                                      keywords: keywordsList,
+                                      brand: selectedProduct.vendor,
+                                      storeName: loaderData?.shop?.name || "",
+                                      imageIndex: idx,
+                                      totalImages: selectedProduct.media.length,
+                                    });
+                                    setImageDrafts((prev) => ({ ...prev, [m.id]: suggested }));
+                                  }}
+                                  style={{
+                                    background: "#f8fafc",
+                                    border: "1px solid #cbd5e1",
+                                    borderRadius: "6px",
+                                    padding: "6px 10px",
+                                    fontSize: "11px",
+                                    fontWeight: "700",
+                                    color: "#2563eb",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  ✨ Suggest
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
                   </s-stack>
                 </s-box>
               </>

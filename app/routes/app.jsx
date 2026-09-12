@@ -18,6 +18,7 @@ export default function App() {
         <s-link href="/app">Dashboard</s-link>
         <s-link href="/app/seo-optimizer">SEO Optimizer</s-link>
         <s-link href="/app/bulk-optimizer">Bulk Optimizer</s-link>
+        <s-link href="/app/image-alt-optimizer">Image ALT Optimizer</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

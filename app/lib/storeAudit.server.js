@@ -326,7 +326,6 @@ export async function getStoreAuditStats(admin, shop, totalCatalogProducts, firs
     const cached = readCachedStats(shop);
     if (cached && cached.status === "COMPLETED") {
       // Merge: use live sample percentages applied to total, but honour stored bulkOperationId
-      const sampleRatio = firstBatchProducts.length / Math.max(total, 1);
       const liveWithKeywords = firstBatchProducts.filter((p) => {
         const val = p.keywordsMetafield?.value;
         return Boolean(val && val.trim().length > 0 && val !== "[]" && val !== '""');
