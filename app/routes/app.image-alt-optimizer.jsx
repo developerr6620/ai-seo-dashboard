@@ -124,38 +124,59 @@ export const loader = async ({ request }) => {
     console.error("[ImageAltOptimizer] Product fetch error:", err);
   }
 
-  // 2. Fetch Store Files (Content -> Files)
+  // 2. Fetch Store Files (Content -> Files) with pagination loop
   try {
-    const filesRes = await admin.graphql(
-      `#graphql
-      query getStoreFiles {
-        files(first: 100, query: "media_type:IMAGE") {
-          edges {
-            cursor
-            node {
-              id
-              alt
-              createdAt
-              ... on MediaImage {
+    let hasNextPage = true;
+    let cursor = null;
+    let allRawFiles = [];
+    let pageCount = 0;
+    const MAX_PAGES = 10; // Load up to 1,000 files automatically
+
+    while (hasNextPage && pageCount < MAX_PAGES) {
+      pageCount++;
+      const filesRes = await admin.graphql(
+        `#graphql
+        query getStoreFiles($cursor: String) {
+          files(first: 100, after: $cursor, query: "media_type:IMAGE") {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            edges {
+              cursor
+              node {
                 id
                 alt
-                image {
-                  url
-                  width
-                  height
-                  originalSrc
+                createdAt
+                ... on MediaImage {
+                  id
+                  alt
+                  image {
+                    url
+                    width
+                    height
+                    originalSrc
+                  }
                 }
               }
             }
           }
-        }
-      }`
-    );
+        }`,
+        { variables: { cursor } }
+      );
 
-    const filesJson = await filesRes.json();
-    const rawFiles = filesJson?.data?.files?.edges?.map((e) => e.node) || [];
+      const filesJson = await filesRes.json();
+      const pageEdges = filesJson?.data?.files?.edges || [];
+      allRawFiles.push(...pageEdges.map((e) => e.node));
 
-    files = rawFiles
+      const pageInfo = filesJson?.data?.files?.pageInfo;
+      hasNextPage = Boolean(pageInfo?.hasNextPage);
+      cursor = pageInfo?.endCursor || null;
+
+      if (pageEdges.length === 0) break;
+    }
+
+    files = allRawFiles
       .map((f) => {
         const url = f.image?.url || f.image?.originalSrc || "";
         const filename = cleanFilename(url);
