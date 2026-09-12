@@ -362,3 +362,124 @@ export function enforceSeoLimits({ title, description }) {
   };
 }
 
+// ==========================================
+// COLLECTION SEO GENERATORS
+// ==========================================
+export function generateCollectionSeoCopy({
+  title = "Collection",
+  description = "",
+  storeName = "Our Store",
+  tone = "Converting",
+  variant = 0,
+} = {}) {
+  const cleanTitle = normalizeSpace(title);
+  const cleanStore = normalizeSpace(storeName);
+
+  const titleTemplates = [
+    `${cleanTitle} Collection | ${cleanStore}`,
+    `Shop ${cleanTitle} Online | ${cleanStore}`,
+    `Best ${cleanTitle} Deals | ${cleanStore}`,
+    `Browse ${cleanTitle} - ${cleanStore}`,
+  ];
+
+  const chosenTitle = titleTemplates[variant % titleTemplates.length] || `${cleanTitle} | ${cleanStore}`;
+
+  // Description
+  const plainDesc = normalizeSpace(description);
+  let baseDesc = "";
+  if (plainDesc.length >= 40) {
+    baseDesc = plainDesc;
+  } else if (variant === 1) {
+    baseDesc = `Shop our full selection of ${cleanTitle}. Find top-rated favorites and exclusive deals at ${cleanStore}.`;
+  } else if (variant === 2) {
+    baseDesc = `Browse curated ${cleanTitle} at ${cleanStore}. Enjoy high quality, exceptional value, and fast shipping.`;
+  } else {
+    baseDesc = `Explore the complete ${cleanTitle} collection at ${cleanStore}. Discover premium quality and great prices today.`;
+  }
+
+  return {
+    title: fitComplete(chosenTitle, TITLE_MAX),
+    description: fitComplete(baseDesc, DESC_MAX, { asSentence: true }),
+  };
+}
+
+// ==========================================
+// PAGE SEO GENERATORS
+// ==========================================
+export function generatePageSeoCopy({
+  title = "Page",
+  body = "",
+  storeName = "Our Store",
+  variant = 0,
+} = {}) {
+  const cleanTitle = normalizeSpace(title);
+  const cleanStore = normalizeSpace(storeName);
+
+  const titleTemplates = [
+    `${cleanTitle} | ${cleanStore}`,
+    `${cleanTitle} - Official ${cleanStore}`,
+    `${cleanStore} | ${cleanTitle}`,
+  ];
+  const chosenTitle = titleTemplates[variant % titleTemplates.length] || `${cleanTitle} | ${cleanStore}`;
+
+  const lowerTitle = cleanTitle.toLowerCase();
+  const plainBody = normalizeSpace(body);
+
+  let baseDesc = "";
+  if (plainBody.length >= 40) {
+    baseDesc = plainBody;
+  } else if (lowerTitle.includes("about")) {
+    baseDesc = `Learn about ${cleanStore}, our mission, quality commitments, and our passion for serving our customers.`;
+  } else if (lowerTitle.includes("contact")) {
+    baseDesc = `Have questions? Get in touch with the ${cleanStore} customer support team for fast, friendly assistance.`;
+  } else if (lowerTitle.includes("faq") || lowerTitle.includes("frequently")) {
+    baseDesc = `Find quick answers to frequently asked questions about shipping, returns, and ordering from ${cleanStore}.`;
+  } else if (lowerTitle.includes("privacy") || lowerTitle.includes("terms") || lowerTitle.includes("policy")) {
+    baseDesc = `Read the official ${cleanTitle} for ${cleanStore}. Understand our customer privacy and store terms.`;
+  } else {
+    baseDesc = `Read our official ${cleanTitle} page at ${cleanStore}. Learn everything you need to know about our services.`;
+  }
+
+  return {
+    title: fitComplete(chosenTitle, TITLE_MAX),
+    description: fitComplete(baseDesc, DESC_MAX, { asSentence: true }),
+  };
+}
+
+// ==========================================
+// BLOG ARTICLE SEO GENERATORS
+// ==========================================
+export function generateArticleSeoCopy({
+  title = "Article",
+  body = "",
+  blogTitle = "Blog",
+  storeName = "Our Store",
+  variant = 0,
+} = {}) {
+  const cleanTitle = normalizeSpace(title);
+  const cleanStore = normalizeSpace(storeName);
+  const cleanBlog = normalizeSpace(blogTitle);
+
+  const titleTemplates = [
+    `${cleanTitle} | ${cleanStore}`,
+    `${cleanTitle} - ${cleanBlog} | ${cleanStore}`,
+    `${cleanTitle} | Expert Guide`,
+  ];
+  const chosenTitle = titleTemplates[variant % titleTemplates.length] || `${cleanTitle} | ${cleanStore}`;
+
+  const plainBody = normalizeSpace(body);
+  let baseDesc = "";
+  if (plainBody.length >= 40) {
+    baseDesc = plainBody;
+  } else if (variant === 1) {
+    baseDesc = `Discover expert tips and insights in "${cleanTitle}" on the ${cleanStore} blog. Read our full guide today.`;
+  } else {
+    baseDesc = `Read "${cleanTitle}" on ${cleanStore}. Get helpful tips, expert advice, and recommendations.`;
+  }
+
+  return {
+    title: fitComplete(chosenTitle, TITLE_MAX),
+    description: fitComplete(baseDesc, DESC_MAX, { asSentence: true }),
+  };
+}
+

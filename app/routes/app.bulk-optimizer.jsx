@@ -12,6 +12,11 @@ import {
   isDescOk,
   isTitleOk,
 } from "../lib/seoCopy";
+import {
+  BulkCollectionsView,
+  BulkPagesView,
+  BulkArticlesView,
+} from "../components/BulkResourceViews";
 
 function parseMetafieldKeywords(rawVal) {
   if (!rawVal) return [];
@@ -221,8 +226,164 @@ export const loader = async ({ request }) => {
       (pageInfo.hasPreviousPage ?? (currentPage > 1)) && currentPage > 1
     );
 
+    // 1. Fetch Shop details
+    let shopInfo = { name: "Your Store" };
+    try {
+      const shopRes = await admin.graphql(
+        `#graphql
+        query getShopName {
+          shop {
+            name
+            myshopifyDomain
+          }
+        }`
+      );
+      const shopData = await shopRes.json();
+      if (shopData?.data?.shop?.name) {
+        shopInfo = shopData.data.shop;
+      }
+    } catch (e) {
+      console.warn("Shop fetch error:", e);
+    }
+
+    // 2. Fetch Collections
+    let collections = [];
+    try {
+      const colRes = await admin.graphql(
+        `#graphql
+        query getCollectionsSeo {
+          collections(first: 100) {
+            edges {
+              node {
+                id
+                title
+                handle
+                description
+                image {
+                  url
+                }
+                seo {
+                  title
+                  description
+                }
+              }
+            }
+          }
+        }`
+      );
+      const colData = await colRes.json();
+      collections = (colData?.data?.collections?.edges || []).map((e) => ({
+        id: e.node.id,
+        title: e.node.title || "Untitled Collection",
+        handle: e.node.handle || "",
+        description: e.node.description || "",
+        imageUrl: e.node.image?.url || null,
+        seoTitle: e.node.seo?.title || "",
+        seoDescription: e.node.seo?.description || "",
+        hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
+      }));
+    } catch (colErr) {
+      console.warn("Collections fetch error:", colErr);
+    }
+
+    // 3. Fetch Pages & Articles (requires write_content scope)
+    let pages = [];
+    let articles = [];
+    let contentScopeError = false;
+
+    try {
+      const pageRes = await admin.graphql(
+        `#graphql
+        query getPagesSeo {
+          pages(first: 100) {
+            edges {
+              node {
+                id
+                title
+                handle
+                bodySummary
+                seo {
+                  title
+                  description
+                }
+              }
+            }
+          }
+        }`
+      );
+      const pageData = await pageRes.json();
+      if (pageData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+        contentScopeError = true;
+      } else {
+        pages = (pageData?.data?.pages?.edges || []).map((e) => ({
+          id: e.node.id,
+          title: e.node.title || "Untitled Page",
+          handle: e.node.handle || "",
+          bodySummary: e.node.bodySummary || "",
+          seoTitle: e.node.seo?.title || "",
+          seoDescription: e.node.seo?.description || "",
+          hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
+        }));
+      }
+    } catch (pageErr) {
+      console.warn("Pages fetch error:", pageErr.message);
+      contentScopeError = true;
+    }
+
+    try {
+      const artRes = await admin.graphql(
+        `#graphql
+        query getArticlesSeo {
+          articles(first: 100) {
+            edges {
+              node {
+                id
+                title
+                handle
+                summaryHtml
+                blog {
+                  title
+                }
+                image {
+                  url
+                }
+                seo {
+                  title
+                  description
+                }
+              }
+            }
+          }
+        }`
+      );
+      const artData = await artRes.json();
+      if (artData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+        contentScopeError = true;
+      } else {
+        articles = (artData?.data?.articles?.edges || []).map((e) => ({
+          id: e.node.id,
+          title: e.node.title || "Untitled Article",
+          handle: e.node.handle || "",
+          summary: e.node.summaryHtml || "",
+          blogTitle: e.node.blog?.title || "Blog",
+          imageUrl: e.node.image?.url || null,
+          seoTitle: e.node.seo?.title || "",
+          seoDescription: e.node.seo?.description || "",
+          hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
+        }));
+      }
+    } catch (artErr) {
+      console.warn("Articles fetch error:", artErr.message);
+      contentScopeError = true;
+    }
+
     return {
+      shop: shopInfo,
       products,
+      collections,
+      pages,
+      articles,
+      contentScopeError,
       pagination: {
         currentPage,
         hasNextPage,
@@ -236,7 +397,12 @@ export const loader = async ({ request }) => {
   } catch (error) {
     console.error("Bulk optimizer loader error:", error);
     return {
+      shop: { name: "Your Store" },
       products: [],
+      collections: [],
+      pages: [],
+      articles: [],
+      contentScopeError: false,
       pagination: {
         currentPage: 1,
         hasNextPage: false,
@@ -256,6 +422,16 @@ export default function BulkOptimizer() {
   const revalidator = useRevalidator();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
+
+  const shop = loaderData?.shop || { name: "Your Store" };
+  const collections = loaderData?.collections || [];
+  const pages = loaderData?.pages || [];
+  const articles = loaderData?.articles || [];
+  const contentScopeError = loaderData?.contentScopeError || false;
+
+  // Resource Switcher: "products" | "collections" | "pages" | "articles"
+  const [activeResource, setActiveResource] = useState("products");
+
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const pagination = loaderData?.pagination || {
     currentPage: 1,
@@ -625,8 +801,142 @@ export default function BulkOptimizer() {
         </div>
       )}
 
-      {/* Hero / Bulk Control Bar */}
-      <s-section>
+      {/* Navigation Breadcrumb & Back Link */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Link to="/app" style={{ color: "#2563eb", textDecoration: "none", fontSize: "13px", fontWeight: "600" }}>
+            ← Back to Dashboard
+          </Link>
+          <span style={{ color: "#cbd5e1" }}>|</span>
+          <span style={{ fontSize: "13px", color: "#64748b" }}>
+            Store: <strong>{shop.name}</strong>
+          </span>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Link
+            to="/app/image-alt-optimizer"
+            style={{ background: "#f1f5f9", color: "#334155", padding: "6px 12px", borderRadius: "6px", textDecoration: "none", fontSize: "12px", fontWeight: "600" }}
+          >
+            🖼️ Image ALT Optimizer →
+          </Link>
+        </div>
+      </div>
+
+      {/* RESOURCE SWITCHER TABS */}
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          background: "#f1f5f9",
+          padding: "6px",
+          borderRadius: "10px",
+          marginBottom: "20px",
+          border: "1px solid #e2e8f0",
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveResource("products")}
+          style={{
+            flex: "1 1 180px",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "none",
+            background: activeResource === "products" ? "#ffffff" : "transparent",
+            color: activeResource === "products" ? "#0f172a" : "#64748b",
+            fontWeight: "800",
+            fontSize: "13px",
+            cursor: "pointer",
+            boxShadow: activeResource === "products" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span>📦</span> Products ({pagination.totalCount || products.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveResource("collections")}
+          style={{
+            flex: "1 1 180px",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "none",
+            background: activeResource === "collections" ? "#ffffff" : "transparent",
+            color: activeResource === "collections" ? "#0f172a" : "#64748b",
+            fontWeight: "800",
+            fontSize: "13px",
+            cursor: "pointer",
+            boxShadow: activeResource === "collections" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span>📁</span> Collections ({collections.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveResource("pages")}
+          style={{
+            flex: "1 1 180px",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "none",
+            background: activeResource === "pages" ? "#ffffff" : "transparent",
+            color: activeResource === "pages" ? "#0f172a" : "#64748b",
+            fontWeight: "800",
+            fontSize: "13px",
+            cursor: "pointer",
+            boxShadow: activeResource === "pages" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span>📄</span> Pages ({pages.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveResource("articles")}
+          style={{
+            flex: "1 1 180px",
+            padding: "10px 16px",
+            borderRadius: "8px",
+            border: "none",
+            background: activeResource === "articles" ? "#ffffff" : "transparent",
+            color: activeResource === "articles" ? "#0f172a" : "#64748b",
+            fontWeight: "800",
+            fontSize: "13px",
+            cursor: "pointer",
+            boxShadow: activeResource === "articles" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span>📝</span> Blog Posts ({articles.length})
+        </button>
+      </div>
+
+      {/* RESOURCE VIEW: PRODUCTS */}
+      {activeResource === "products" && (
+        <>
+        <s-section>
         <div
           style={{
             background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
@@ -1353,6 +1663,37 @@ export default function BulkOptimizer() {
           )}
         </div>
       </s-section>
+      </>
+      )}
+
+      {/* RESOURCE VIEW: COLLECTIONS */}
+      {activeResource === "collections" && (
+        <BulkCollectionsView
+          collections={collections}
+          storeName={shop.name}
+          onNotify={setToastMessage}
+        />
+      )}
+
+      {/* RESOURCE VIEW: PAGES */}
+      {activeResource === "pages" && (
+        <BulkPagesView
+          pages={pages}
+          storeName={shop.name}
+          contentScopeError={contentScopeError}
+          onNotify={setToastMessage}
+        />
+      )}
+
+      {/* RESOURCE VIEW: BLOG ARTICLES */}
+      {activeResource === "articles" && (
+        <BulkArticlesView
+          articles={articles}
+          storeName={shop.name}
+          contentScopeError={contentScopeError}
+          onNotify={setToastMessage}
+        />
+      )}
       </div>
     </s-page>
   );

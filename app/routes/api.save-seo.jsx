@@ -100,7 +100,226 @@ export const action = async ({ request }) => {
 
   try {
     const data = await request.json();
+    const resourceType =
+      data.resourceType ||
+      (data.collectionId || data.items?.[0]?.collectionId
+        ? "collection"
+        : data.pageId || data.items?.[0]?.pageId
+        ? "page"
+        : data.articleId || data.items?.[0]?.articleId
+        ? "article"
+        : "product");
 
+    // ==========================================
+    // 1. COLLECTIONS SEO
+    // ==========================================
+    if (resourceType === "collection") {
+      const items = Array.isArray(data.items)
+        ? data.items
+        : [{ id: data.collectionId || data.id, seoTitle: data.seoTitle, seoDescription: data.seoDescription }];
+      let successCount = 0;
+      const errors = [];
+
+      for (const item of items) {
+        const colId = item.id || item.collectionId;
+        if (!colId || !item.seoTitle) continue;
+        const limited = enforceSeoLimits({
+          title: item.seoTitle,
+          description: item.seoDescription || "",
+        });
+
+        try {
+          const res = await admin.graphql(
+            `#graphql
+            mutation updateCollectionSeo($input: CollectionInput!) {
+              collectionUpdate(input: $input) {
+                collection {
+                  id
+                  title
+                  seo {
+                    title
+                    description
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+            {
+              variables: {
+                input: {
+                  id: colId,
+                  seo: {
+                    title: limited.title,
+                    description: limited.description,
+                  },
+                },
+              },
+            }
+          );
+          const resJson = await res.json();
+          const userErrors = resJson?.data?.collectionUpdate?.userErrors || [];
+          if (userErrors.length > 0) {
+            errors.push({ id: colId, error: userErrors.map((e) => e.message).join(", ") });
+          } else {
+            successCount++;
+          }
+        } catch (err) {
+          errors.push({ id: colId, error: err.message });
+        }
+      }
+
+      return Response.json({
+        success: successCount > 0,
+        resourceType: "collection",
+        updatedCount: successCount,
+        errors,
+      });
+    }
+
+    // ==========================================
+    // 2. PAGES SEO (Online Store -> Pages)
+    // ==========================================
+    if (resourceType === "page") {
+      const items = Array.isArray(data.items)
+        ? data.items
+        : [{ id: data.pageId || data.id, seoTitle: data.seoTitle, seoDescription: data.seoDescription }];
+      let successCount = 0;
+      const errors = [];
+
+      for (const item of items) {
+        const pageId = item.id || item.pageId;
+        if (!pageId || !item.seoTitle) continue;
+        const limited = enforceSeoLimits({
+          title: item.seoTitle,
+          description: item.seoDescription || "",
+        });
+
+        try {
+          const res = await admin.graphql(
+            `#graphql
+            mutation updatePageSeo($id: ID!, $page: PageUpdateInput!) {
+              pageUpdate(id: $id, page: $page) {
+                page {
+                  id
+                  title
+                  seo {
+                    title
+                    description
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+            {
+              variables: {
+                id: pageId,
+                page: {
+                  seo: {
+                    title: limited.title,
+                    description: limited.description,
+                  },
+                },
+              },
+            }
+          );
+          const resJson = await res.json();
+          const userErrors = resJson?.data?.pageUpdate?.userErrors || [];
+          if (userErrors.length > 0) {
+            errors.push({ id: pageId, error: userErrors.map((e) => e.message).join(", ") });
+          } else {
+            successCount++;
+          }
+        } catch (err) {
+          errors.push({ id: pageId, error: err.message });
+        }
+      }
+
+      return Response.json({
+        success: successCount > 0,
+        resourceType: "page",
+        updatedCount: successCount,
+        errors,
+      });
+    }
+
+    // ==========================================
+    // 3. BLOG ARTICLES SEO
+    // ==========================================
+    if (resourceType === "article") {
+      const items = Array.isArray(data.items)
+        ? data.items
+        : [{ id: data.articleId || data.id, seoTitle: data.seoTitle, seoDescription: data.seoDescription }];
+      let successCount = 0;
+      const errors = [];
+
+      for (const item of items) {
+        const artId = item.id || item.articleId;
+        if (!artId || !item.seoTitle) continue;
+        const limited = enforceSeoLimits({
+          title: item.seoTitle,
+          description: item.seoDescription || "",
+        });
+
+        try {
+          const res = await admin.graphql(
+            `#graphql
+            mutation updateArticleSeo($id: ID!, $article: ArticleUpdateInput!) {
+              articleUpdate(id: $id, article: $article) {
+                article {
+                  id
+                  title
+                  seo {
+                    title
+                    description
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+            {
+              variables: {
+                id: artId,
+                article: {
+                  seo: {
+                    title: limited.title,
+                    description: limited.description,
+                  },
+                },
+              },
+            }
+          );
+          const resJson = await res.json();
+          const userErrors = resJson?.data?.articleUpdate?.userErrors || [];
+          if (userErrors.length > 0) {
+            errors.push({ id: artId, error: userErrors.map((e) => e.message).join(", ") });
+          } else {
+            successCount++;
+          }
+        } catch (err) {
+          errors.push({ id: artId, error: err.message });
+        }
+      }
+
+      return Response.json({
+        success: successCount > 0,
+        resourceType: "article",
+        updatedCount: successCount,
+        errors,
+      });
+    }
+
+    // ==========================================
+    // 4. PRODUCTS SEO (Default)
+    // ==========================================
     // Check if this is a bulk request
     if (Array.isArray(data.items)) {
       const items = data.items;
