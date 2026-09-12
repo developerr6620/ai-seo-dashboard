@@ -8,8 +8,13 @@ import {
   ALT_MAX,
   ALT_WARN,
   ALT_PRESETS,
+  FILE_ALT_PRESETS,
+  COLLECTION_ALT_PRESETS,
   isAltOk,
+  cleanFilename,
   generateImageAltText,
+  generateStoreFileAltText,
+  generateCollectionAltText,
   getImageViewLabel,
 } from "../lib/imageAltCopy";
 
@@ -23,7 +28,7 @@ function parseKeywords(rawVal) {
       const parsed = JSON.parse(str);
       if (Array.isArray(parsed)) return parsed.map((k) => String(k).trim()).filter(Boolean);
     } catch {
-      // ignore JSON parse error
+      // ignore parse error
     }
   }
   return str.split(/[,\n\r]+/).map((k) => k.trim()).filter(Boolean);
@@ -33,8 +38,15 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shopName = session?.shop || "";
 
+  let shop = { name: shopName || "Your Store" };
+  let products = [];
+  let files = [];
+  let collections = [];
+  let filesScopeError = false;
+
+  // 1. Fetch Products & Product Media
   try {
-    const response = await admin.graphql(
+    const prodRes = await admin.graphql(
       `#graphql
       query getProductsWithMedia {
         shop {
@@ -79,11 +91,13 @@ export const loader = async ({ request }) => {
       }`
     );
 
-    const data = await response.json();
-    const shop = data?.data?.shop || { name: shopName || "Your Store" };
-    const rawProducts = data?.data?.products?.edges?.map((e) => e.node) || [];
+    const prodJson = await prodRes.json();
+    if (prodJson?.data?.shop) {
+      shop = prodJson.data.shop;
+    }
 
-    const products = rawProducts.map((p) => {
+    const rawProducts = prodJson?.data?.products?.edges?.map((e) => e.node) || [];
+    products = rawProducts.map((p) => {
       const mediaNodes = (p.media?.nodes || [])
         .filter((m) => m.mediaContentType === "IMAGE" || !m.mediaContentType)
         .map((m) => ({
@@ -105,481 +119,614 @@ export const loader = async ({ request }) => {
         media: mediaNodes,
       };
     });
-
-    return {
-      shop,
-      products,
-    };
-  } catch (error) {
-    console.error("[ImageAltOptimizer] Loader error:", error);
-    return {
-      shop: { name: shopName || "Your Store" },
-      products: [],
-    };
+  } catch (err) {
+    console.error("[ImageAltOptimizer] Product fetch error:", err);
   }
+
+  // 2. Fetch Store Files (Content -> Files)
+  try {
+    const filesRes = await admin.graphql(
+      `#graphql
+      query getStoreFiles {
+        files(first: 100, query: "media_type:IMAGE") {
+          edges {
+            cursor
+            node {
+              id
+              alt
+              createdAt
+              ... on MediaImage {
+                id
+                alt
+                image {
+                  url
+                  width
+                  height
+                  originalSrc
+                }
+              }
+            }
+          }
+        }
+      }`
+    );
+
+    const filesJson = await filesRes.json();
+    const rawFiles = filesJson?.data?.files?.edges?.map((e) => e.node) || [];
+
+    files = rawFiles
+      .map((f) => {
+        const url = f.image?.url || f.image?.originalSrc || "";
+        const filename = cleanFilename(url);
+        return {
+          id: f.id,
+          alt: f.alt || "",
+          url,
+          filename,
+          width: f.image?.width || null,
+          height: f.image?.height || null,
+          createdAt: f.createdAt || "",
+        };
+      })
+      .filter((f) => Boolean(f.url));
+  } catch (err) {
+    console.warn("[ImageAltOptimizer] Files fetch error (check write_files scope):", err.message);
+    filesScopeError = true;
+  }
+
+  // 3. Fetch Collections with Images
+  try {
+    const colRes = await admin.graphql(
+      `#graphql
+      query getCollectionsWithImages {
+        collections(first: 100) {
+          edges {
+            cursor
+            node {
+              id
+              title
+              handle
+              image {
+                url
+                altText
+                width
+                height
+              }
+            }
+          }
+        }
+      }`
+    );
+
+    const colJson = await colRes.json();
+    const rawCollections = colJson?.data?.collections?.edges?.map((e) => e.node) || [];
+
+    collections = rawCollections
+      .filter((c) => Boolean(c.image?.url))
+      .map((c) => ({
+        id: c.id,
+        title: c.title || "Collection",
+        handle: c.handle || "",
+        alt: c.image?.altText || "",
+        url: c.image?.url || "",
+        width: c.image?.width || null,
+        height: c.image?.height || null,
+      }));
+  } catch (err) {
+    console.error("[ImageAltOptimizer] Collection fetch error:", err);
+  }
+
+  return {
+    shop,
+    products,
+    files,
+    collections,
+    filesScopeError,
+  };
 };
 
 export default function ImageAltOptimizer() {
-  const { shop, products: initialProducts } = useLoaderData();
+  const { shop, products: initialProducts, files: initialFiles, collections: initialCollections, filesScopeError } = useLoaderData();
   const shopify = useAppBridge();
   const navigation = useNavigation();
   const isPageLoading = navigation.state === "loading";
 
-  // State
+  // Tab State: "products" | "files" | "collections"
+  const [activeTab, setActiveTab] = useState("products");
+
+  // Data States
   const [products, setProducts] = useState(initialProducts);
-  const [activeTemplate, setActiveTemplate] = useState(ALT_PRESETS[0].template);
+  const [files, setFiles] = useState(initialFiles);
+  const [collections, setCollections] = useState(initialCollections);
+
+  // Template States per tab
+  const [productTemplate, setProductTemplate] = useState(ALT_PRESETS[0].template);
+  const [fileTemplate, setFileTemplate] = useState(FILE_ALT_PRESETS[0].template);
+  const [collectionTemplate, setCollectionTemplate] = useState(COLLECTION_ALT_PRESETS[0].template);
+
+  // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all"); // "all" | "missing" | "optimized"
 
-  // Drafts tracking: { [mediaId]: string }
-  const [draftAlts, setDraftAlts] = useState(() => {
-    const initialDrafts = {};
-    for (const p of initialProducts) {
-      for (const m of p.media) {
-        initialDrafts[m.id] = m.alt || "";
-      }
-    }
-    return initialDrafts;
+  // Drafts Maps
+  const [draftProductAlts, setDraftProductAlts] = useState(() => {
+    const drafts = {};
+    initialProducts.forEach((p) => {
+      p.media.forEach((m) => {
+        drafts[m.id] = m.alt || "";
+      });
+    });
+    return drafts;
+  });
+
+  const [draftFileAlts, setDraftFileAlts] = useState(() => {
+    const drafts = {};
+    initialFiles.forEach((f) => {
+      drafts[f.id] = f.alt || "";
+    });
+    return drafts;
+  });
+
+  const [draftCollectionAlts, setDraftCollectionAlts] = useState(() => {
+    const drafts = {};
+    initialCollections.forEach((c) => {
+      drafts[c.id] = c.alt || "";
+    });
+    return drafts;
   });
 
   // Saving states
-  const [savingMediaId, setSavingMediaId] = useState(null);
-  const [savingProductId, setSavingProductId] = useState(null);
+  const [savingId, setSavingId] = useState(null);
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [feedback, setFeedback] = useState(null);
 
-  // Helper to get current value of alt (draft or original)
-  const getAltValue = useCallback(
-    (mediaId, originalAlt) => {
-      return draftAlts[mediaId] !== undefined ? draftAlts[mediaId] : originalAlt || "";
-    },
-    [draftAlts]
-  );
+  // Value Getters
+  const getProductAlt = useCallback((mediaId, orig) => (draftProductAlts[mediaId] !== undefined ? draftProductAlts[mediaId] : orig || ""), [draftProductAlts]);
+  const getFileAlt = useCallback((fileId, orig) => (draftFileAlts[fileId] !== undefined ? draftFileAlts[fileId] : orig || ""), [draftFileAlts]);
+  const getCollectionAlt = useCallback((colId, orig) => (draftCollectionAlts[colId] !== undefined ? draftCollectionAlts[colId] : orig || ""), [draftCollectionAlts]);
 
-  // Compute catalog image statistics
+  // Statistics calculation for the active tab
   const stats = useMemo(() => {
-    let totalImages = 0;
-    let imagesWithAlt = 0;
-    let productsWithMissing = 0;
-
-    for (const p of products) {
-      let prodMissing = false;
-      for (const m of p.media) {
-        totalImages++;
-        const currentVal = getAltValue(m.id, m.alt);
-        if (currentVal.trim().length > 0) {
-          imagesWithAlt++;
-        } else {
-          prodMissing = true;
-        }
-      }
-      if (prodMissing && p.media.length > 0) {
-        productsWithMissing++;
-      }
+    if (activeTab === "products") {
+      let total = 0;
+      let withAlt = 0;
+      let prodsWithMissing = 0;
+      products.forEach((p) => {
+        let missing = false;
+        p.media.forEach((m) => {
+          total++;
+          if (getProductAlt(m.id, m.alt).trim()) withAlt++;
+          else missing = true;
+        });
+        if (missing && p.media.length > 0) prodsWithMissing++;
+      });
+      const missingCount = Math.max(0, total - withAlt);
+      const pct = total > 0 ? Math.round((withAlt / total) * 100) : 100;
+      return { total, withAlt, missing: missingCount, parentMissing: prodsWithMissing, pct, label: "Product Images" };
     }
 
-    const missingAlt = Math.max(0, totalImages - imagesWithAlt);
-    const coveragePct = totalImages > 0 ? Math.round((imagesWithAlt / totalImages) * 100) : 100;
+    if (activeTab === "files") {
+      const total = files.length;
+      const withAlt = files.filter((f) => Boolean(getFileAlt(f.id, f.alt).trim())).length;
+      const missingCount = Math.max(0, total - withAlt);
+      const pct = total > 0 ? Math.round((withAlt / total) * 100) : 100;
+      return { total, withAlt, missing: missingCount, parentMissing: missingCount, pct, label: "Store Files & Banners" };
+    }
 
-    return {
-      totalProducts: products.length,
-      totalImages,
-      imagesWithAlt,
-      missingAlt,
-      productsWithMissing,
-      coveragePct,
-    };
-  }, [products, getAltValue]);
+    if (activeTab === "collections") {
+      const total = collections.length;
+      const withAlt = collections.filter((c) => Boolean(getCollectionAlt(c.id, c.alt).trim())).length;
+      const missingCount = Math.max(0, total - withAlt);
+      const pct = total > 0 ? Math.round((withAlt / total) * 100) : 100;
+      return { total, withAlt, missing: missingCount, parentMissing: missingCount, pct, label: "Collection Banners" };
+    }
 
-  // Dirty changes count
+    return { total: 0, withAlt: 0, missing: 0, parentMissing: 0, pct: 100, label: "" };
+  }, [activeTab, products, files, collections, getProductAlt, getFileAlt, getCollectionAlt]);
+
+  // Dirty changes count for active tab
   const dirtyCount = useMemo(() => {
-    let count = 0;
-    for (const p of products) {
-      for (const m of p.media) {
-        const draft = (draftAlts[m.id] || "").trim();
-        const original = (m.alt || "").trim();
-        if (draft !== original) {
-          count++;
-        }
-      }
+    if (activeTab === "products") {
+      let count = 0;
+      products.forEach((p) => {
+        p.media.forEach((m) => {
+          if ((draftProductAlts[m.id] || "").trim() !== (m.alt || "").trim()) count++;
+        });
+      });
+      return count;
     }
-    return count;
-  }, [products, draftAlts]);
+    if (activeTab === "files") {
+      return files.filter((f) => (draftFileAlts[f.id] || "").trim() !== (f.alt || "").trim()).length;
+    }
+    if (activeTab === "collections") {
+      return collections.filter((c) => (draftCollectionAlts[c.id] || "").trim() !== (c.alt || "").trim()).length;
+    }
+    return 0;
+  }, [activeTab, products, files, collections, draftProductAlts, draftFileAlts, draftCollectionAlts]);
 
-  // Filtered products list
+  // Filtered lists
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return products.filter((p) => {
-      // Search match
-      const matchesSearch = !q || p.title.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q);
-      if (!matchesSearch) return false;
-
-      // Status filter
-      if (filterMode === "missing") {
-        return p.media.some((m) => !getAltValue(m.id, m.alt).trim());
-      }
-      if (filterMode === "optimized") {
-        return p.media.length > 0 && p.media.every((m) => Boolean(getAltValue(m.id, m.alt).trim()));
-      }
+      const match = !q || p.title.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q);
+      if (!match) return false;
+      if (filterMode === "missing") return p.media.some((m) => !getProductAlt(m.id, m.alt).trim());
+      if (filterMode === "optimized") return p.media.length > 0 && p.media.every((m) => Boolean(getProductAlt(m.id, m.alt).trim()));
       return true;
     });
-  }, [products, searchQuery, filterMode, getAltValue]);
+  }, [products, searchQuery, filterMode, getProductAlt]);
 
-  // Live Sample Preview for the first product's first image
+  const filteredFiles = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return files.filter((f) => {
+      const match = !q || f.filename.toLowerCase().includes(q) || f.url.toLowerCase().includes(q);
+      if (!match) return false;
+      const val = getFileAlt(f.id, f.alt).trim();
+      if (filterMode === "missing") return !val;
+      if (filterMode === "optimized") return Boolean(val);
+      return true;
+    });
+  }, [files, searchQuery, filterMode, getFileAlt]);
+
+  const filteredCollections = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return collections.filter((c) => {
+      const match = !q || c.title.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q);
+      if (!match) return false;
+      const val = getCollectionAlt(c.id, c.alt).trim();
+      if (filterMode === "missing") return !val;
+      if (filterMode === "optimized") return Boolean(val);
+      return true;
+    });
+  }, [collections, searchQuery, filterMode, getCollectionAlt]);
+
+  // Live Sample Preview for the active tab
   const samplePreview = useMemo(() => {
-    const firstProd = products[0];
-    if (!firstProd) return "";
-    return generateImageAltText({
-      productTitle: firstProd.title,
-      keyword: firstProd.keywords?.[0] || "",
-      keywords: firstProd.keywords,
-      brand: firstProd.vendor,
-      storeName: shop.name,
-      imageIndex: 0,
-      totalImages: firstProd.media.length || 1,
-      template: activeTemplate,
-    });
-  }, [products, shop.name, activeTemplate]);
-
-  // Handler: Change single draft alt
-  const handleDraftChange = (mediaId, value) => {
-    setDraftAlts((prev) => ({ ...prev, [mediaId]: value }));
-  };
-
-  // Handler: Insert token into active template
-  const handleInsertToken = (token) => {
-    setActiveTemplate((prev) => {
-      const space = prev.endsWith(" ") || prev === "" ? "" : " ";
-      return `${prev}${space}${token}`;
-    });
-  };
-
-  // Handler: Generate AI ALT for 1 image
-  const handleGenerateSingle = (product, mediaId, index) => {
-    const generated = generateImageAltText({
-      productTitle: product.title,
-      keyword: product.keywords?.[index % (product.keywords.length || 1)] || "",
-      keywords: product.keywords,
-      brand: product.vendor,
-      storeName: shop.name,
-      imageIndex: index,
-      totalImages: product.media.length,
-      template: activeTemplate,
-    });
-
-    handleDraftChange(mediaId, generated);
-    if (shopify?.toast) {
-      shopify.toast.show(`✨ Generated ALT text for Image #${index + 1}`);
-    }
-  };
-
-  // Handler: Generate for all images of a product
-  const handleGenerateProduct = (product) => {
-    const newDrafts = {};
-    product.media.forEach((m, idx) => {
-      const generated = generateImageAltText({
-        productTitle: product.title,
-        keyword: product.keywords?.[idx % (product.keywords.length || 1)] || "",
-        keywords: product.keywords,
-        brand: product.vendor,
+    if (activeTab === "products") {
+      const p = products[0];
+      if (!p) return "";
+      return generateImageAltText({
+        productTitle: p.title,
+        keyword: p.keywords?.[0] || "",
+        keywords: p.keywords,
+        brand: p.vendor,
         storeName: shop.name,
-        imageIndex: idx,
-        totalImages: product.media.length,
-        template: activeTemplate,
+        imageIndex: 0,
+        totalImages: p.media.length || 1,
+        template: productTemplate,
       });
-      newDrafts[m.id] = generated;
-    });
-
-    setDraftAlts((prev) => ({ ...prev, ...newDrafts }));
-    if (shopify?.toast) {
-      shopify.toast.show(`✨ Generated ALT texts for ${product.title}`);
     }
-  };
+    if (activeTab === "files") {
+      const f = files[0];
+      return generateStoreFileAltText({
+        filename: f?.filename || "Sample Store Banner",
+        url: f?.url || "",
+        storeName: shop.name,
+        template: fileTemplate,
+      });
+    }
+    if (activeTab === "collections") {
+      const c = collections[0];
+      return generateCollectionAltText({
+        collectionTitle: c?.title || "Summer Apparel",
+        storeName: shop.name,
+        template: collectionTemplate,
+      });
+    }
+    return "";
+  }, [activeTab, products, files, collections, shop.name, productTemplate, fileTemplate, collectionTemplate]);
 
-  // Handler: Auto-generate for all images missing ALT text on current view
-  const handleGenerateAllMissing = () => {
-    let generatedCount = 0;
-    const newDrafts = {};
+  // ==========================================
+  // HANDLERS: AUTO-GENERATE
+  // ==========================================
+  const handleAutoGenerateMissing = () => {
+    let count = 0;
 
-    filteredProducts.forEach((p) => {
-      p.media.forEach((m, idx) => {
-        const current = getAltValue(m.id, m.alt).trim();
-        if (!current) {
-          const generated = generateImageAltText({
-            productTitle: p.title,
-            keyword: p.keywords?.[idx % (p.keywords.length || 1)] || "",
-            keywords: p.keywords,
-            brand: p.vendor,
+    if (activeTab === "products") {
+      const drafts = {};
+      filteredProducts.forEach((p) => {
+        p.media.forEach((m, idx) => {
+          if (!getProductAlt(m.id, m.alt).trim()) {
+            drafts[m.id] = generateImageAltText({
+              productTitle: p.title,
+              keyword: p.keywords?.[idx % (p.keywords.length || 1)] || "",
+              keywords: p.keywords,
+              brand: p.vendor,
+              storeName: shop.name,
+              imageIndex: idx,
+              totalImages: p.media.length,
+              template: productTemplate,
+            });
+            count++;
+          }
+        });
+      });
+      setDraftProductAlts((prev) => ({ ...prev, ...drafts }));
+    } else if (activeTab === "files") {
+      const drafts = {};
+      filteredFiles.forEach((f) => {
+        if (!getFileAlt(f.id, f.alt).trim()) {
+          drafts[f.id] = generateStoreFileAltText({
+            filename: f.filename,
+            url: f.url,
             storeName: shop.name,
-            imageIndex: idx,
-            totalImages: p.media.length,
-            template: activeTemplate,
+            template: fileTemplate,
           });
-          newDrafts[m.id] = generated;
-          generatedCount++;
+          count++;
         }
       });
-    });
+      setDraftFileAlts((prev) => ({ ...prev, ...drafts }));
+    } else if (activeTab === "collections") {
+      const drafts = {};
+      filteredCollections.forEach((c) => {
+        if (!getCollectionAlt(c.id, c.alt).trim()) {
+          drafts[c.id] = generateCollectionAltText({
+            collectionTitle: c.title,
+            storeName: shop.name,
+            template: collectionTemplate,
+          });
+          count++;
+        }
+      });
+      setDraftCollectionAlts((prev) => ({ ...prev, ...drafts }));
+    }
 
-    if (generatedCount === 0) {
-      if (shopify?.toast) {
-        shopify.toast.show("No images currently missing ALT text!");
-      }
+    if (count === 0) {
+      if (shopify?.toast) shopify.toast.show("No images missing ALT text in this view!");
       return;
     }
 
-    setDraftAlts((prev) => ({ ...prev, ...newDrafts }));
     setFeedback({
       type: "info",
-      message: `✨ Auto-generated ${generatedCount} ALT texts! Review them below and click 'Save All Changes' to apply to Shopify.`,
+      message: `✨ Generated ${count} ALT texts! Review them below and click 'Save Changes' to apply to Shopify.`,
     });
-    if (shopify?.toast) {
-      shopify.toast.show(`✨ Generated ${generatedCount} Image ALT texts!`);
-    }
+    if (shopify?.toast) shopify.toast.show(`✨ Generated ${count} ALT texts!`);
   };
 
-  // Handler: Save single image ALT to Shopify
-  const handleSaveSingle = async (productId, mediaId) => {
-    const altText = (draftAlts[mediaId] || "").trim();
-    setSavingMediaId(mediaId);
+  // ==========================================
+  // HANDLERS: SAVE
+  // ==========================================
+  // Save single Store File
+  const handleSaveFile = async (fileId) => {
+    const altText = (draftFileAlts[fileId] || "").trim();
+    setSavingId(fileId);
     setFeedback(null);
-
     try {
       const res = await fetch("/api/save-image-alt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          resourceType: "file",
+          fileId,
+          altText,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, alt: altText } : f)));
+        if (shopify?.toast) shopify.toast.show("✓ Store File ALT text saved!");
+      } else {
+        setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
+      }
+    } catch (e) {
+      setFeedback({ type: "error", message: `Error: ${e.message}` });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Save single Collection Banner
+  const handleSaveCollection = async (collection) => {
+    const altText = (draftCollectionAlts[collection.id] || "").trim();
+    setSavingId(collection.id);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/save-image-alt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceType: "collection",
+          collectionId: collection.id,
+          altText,
+          imageUrl: collection.url,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCollections((prev) => prev.map((c) => (c.id === collection.id ? { ...c, alt: altText } : c)));
+        if (shopify?.toast) shopify.toast.show("✓ Collection Banner ALT text saved!");
+      } else {
+        setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
+      }
+    } catch (e) {
+      setFeedback({ type: "error", message: `Error: ${e.message}` });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Save single Product Media
+  const handleSaveProductMedia = async (productId, mediaId) => {
+    const altText = (draftProductAlts[mediaId] || "").trim();
+    setSavingId(mediaId);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/save-image-alt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceType: "product",
           productId,
           mediaId,
           altText,
         }),
       });
-
       const data = await res.json();
       if (data.success) {
-        // Update local products state so it is no longer marked dirty
         setProducts((prev) =>
-          prev.map((p) => {
-            if (p.id !== productId) return p;
-            return {
-              ...p,
-              media: p.media.map((m) => (m.id === mediaId ? { ...m, alt: altText } : m)),
-            };
-          })
+          prev.map((p) => (p.id !== productId ? p : { ...p, media: p.media.map((m) => (m.id === mediaId ? { ...m, alt: altText } : m)) }))
         );
-
-        if (shopify?.toast) {
-          shopify.toast.show("✓ Image ALT text saved to Shopify!");
-        }
+        if (shopify?.toast) shopify.toast.show("✓ Product Image ALT text saved!");
       } else {
         setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
       }
     } catch (e) {
-      setFeedback({ type: "error", message: `Error saving: ${e.message}` });
-    } finally {
-      setSavingMediaId(null);
-    }
-  };
-
-  // Handler: Save all images for a specific product
-  const handleSaveProduct = async (product) => {
-    const dirtyMedia = product.media
-      .filter((m) => {
-        const draft = (draftAlts[m.id] || "").trim();
-        const original = (m.alt || "").trim();
-        return draft !== original;
-      })
-      .map((m) => ({
-        id: m.id,
-        alt: (draftAlts[m.id] || "").trim(),
-      }));
-
-    if (dirtyMedia.length === 0) {
-      if (shopify?.toast) shopify.toast.show("No changes to save for this product.");
-      return;
-    }
-
-    setSavingProductId(product.id);
-    setFeedback(null);
-
-    try {
-      const res = await fetch("/api/save-image-alt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: product.id,
-          media: dirtyMedia,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setProducts((prev) =>
-          prev.map((p) => {
-            if (p.id !== product.id) return p;
-            return {
-              ...p,
-              media: p.media.map((m) => {
-                const savedItem = dirtyMedia.find((dm) => dm.id === m.id);
-                return savedItem ? { ...m, alt: savedItem.alt } : m;
-              }),
-            };
-          })
-        );
-
-        if (shopify?.toast) {
-          shopify.toast.show(`✓ Saved ${dirtyMedia.length} image ALT texts for ${product.title}!`);
-        }
-      } else {
-        setFeedback({ type: "error", message: `Save error: ${data.error}` });
-      }
-    } catch (e) {
       setFeedback({ type: "error", message: `Error: ${e.message}` });
     } finally {
-      setSavingProductId(null);
+      setSavingId(null);
     }
   };
 
-  // Handler: Batch Save All Dirty Changes across entire page
-  const handleBatchSaveAll = async () => {
-    // Collect all products that have dirty media
-    const itemsToSave = [];
-
-    for (const p of products) {
-      const dirtyMedia = p.media
-        .filter((m) => {
-          const draft = (draftAlts[m.id] || "").trim();
-          const original = (m.alt || "").trim();
-          return draft !== original;
-        })
-        .map((m) => ({
-          id: m.id,
-          alt: (draftAlts[m.id] || "").trim(),
-        }));
-
-      if (dirtyMedia.length > 0) {
-        itemsToSave.push({
-          productId: p.id,
-          media: dirtyMedia,
-        });
-      }
-    }
-
-    if (itemsToSave.length === 0) {
-      if (shopify?.toast) shopify.toast.show("No unsaved changes detected.");
-      return;
-    }
-
+  // BATCH SAVE ALL FOR ACTIVE TAB
+  const handleBatchSave = async () => {
     setIsBatchSaving(true);
-    setBatchProgress({ current: 0, total: itemsToSave.length });
     setFeedback(null);
 
-    let totalSaved = 0;
-    let totalErrors = 0;
-
-    // Process in sequential chunks of 5 products to prevent API throttling
-    const CHUNK_SIZE = 5;
-    for (let i = 0; i < itemsToSave.length; i += CHUNK_SIZE) {
-      const chunk = itemsToSave.slice(i, i + CHUNK_SIZE);
-      try {
-        const res = await fetch("/api/save-image-alt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: chunk }),
-        });
-
-        const data = await res.json();
-        if (data.success) {
-          totalSaved += data.updatedImagesCount || 0;
-          // Apply to local state
-          setProducts((prev) =>
-            prev.map((p) => {
-              const matchedItem = chunk.find((c) => c.productId === p.id);
-              if (!matchedItem) return p;
-              return {
-                ...p,
-                media: p.media.map((m) => {
-                  const savedM = matchedItem.media.find((sm) => sm.id === m.id);
-                  return savedM ? { ...m, alt: savedM.alt } : m;
-                }),
-              };
-            })
-          );
-        } else {
-          totalErrors += chunk.length;
-        }
-      } catch (err) {
-        console.error("Batch save error:", err);
-        totalErrors += chunk.length;
-      }
-
-      setBatchProgress({
-        current: Math.min(i + CHUNK_SIZE, itemsToSave.length),
-        total: itemsToSave.length,
-      });
-    }
-
-    setIsBatchSaving(false);
-
-    if (totalErrors === 0) {
-      setFeedback({
-        type: "success",
-        message: `🎉 Successfully saved ${totalSaved} image ALT texts to Shopify!`,
-      });
-      if (shopify?.toast) {
-        shopify.toast.show(`🎉 Saved ${totalSaved} Image ALT texts to Shopify!`);
-      }
-    } else {
-      setFeedback({
-        type: "warning",
-        message: `Saved ${totalSaved} images, but encountered errors on ${totalErrors} products. Please review and retry.`,
-      });
-    }
-  };
-
-  // Discard all unsaved drafts
-  const handleDiscardChanges = () => {
-    if (window.confirm("Are you sure you want to discard all unsaved ALT text changes?")) {
-      const resetDrafts = {};
+    if (activeTab === "products") {
+      const items = [];
       products.forEach((p) => {
-        p.media.forEach((m) => {
-          resetDrafts[m.id] = m.alt || "";
-        });
+        const dirtyMedia = p.media
+          .filter((m) => (draftProductAlts[m.id] || "").trim() !== (m.alt || "").trim())
+          .map((m) => ({ id: m.id, alt: (draftProductAlts[m.id] || "").trim() }));
+        if (dirtyMedia.length > 0) items.push({ productId: p.id, media: dirtyMedia });
       });
-      setDraftAlts(resetDrafts);
-      setFeedback(null);
-      if (shopify?.toast) shopify.toast.show("All unsaved changes discarded.");
+
+      if (items.length === 0) {
+        setIsBatchSaving(false);
+        if (shopify?.toast) shopify.toast.show("No unsaved product changes.");
+        return;
+      }
+
+      setBatchProgress({ current: 0, total: items.length });
+      let saved = 0;
+      const CHUNK = 5;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const chunk = items.slice(i, i + CHUNK);
+        try {
+          const res = await fetch("/api/save-image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceType: "product", items: chunk }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            saved += d.updatedImagesCount || 0;
+            setProducts((prev) =>
+              prev.map((p) => {
+                const match = chunk.find((c) => c.productId === p.id);
+                if (!match) return p;
+                return {
+                  ...p,
+                  media: p.media.map((m) => {
+                    const sm = match.media.find((item) => item.id === m.id);
+                    return sm ? { ...m, alt: sm.alt } : m;
+                  }),
+                };
+              })
+            );
+          }
+        } catch (e) {
+          console.error("Batch error:", e);
+        }
+        setBatchProgress({ current: Math.min(i + CHUNK, items.length), total: items.length });
+      }
+
+      setIsBatchSaving(false);
+      setFeedback({ type: "success", message: `🎉 Successfully saved ${saved} Product Image ALT texts to Shopify!` });
+      if (shopify?.toast) shopify.toast.show(`🎉 Saved ${saved} Product Image ALT texts!`);
+    } else if (activeTab === "files") {
+      const dirtyFiles = files
+        .filter((f) => (draftFileAlts[f.id] || "").trim() !== (f.alt || "").trim())
+        .map((f) => ({ id: f.id, alt: (draftFileAlts[f.id] || "").trim() }));
+
+      if (dirtyFiles.length === 0) {
+        setIsBatchSaving(false);
+        if (shopify?.toast) shopify.toast.show("No unsaved file changes.");
+        return;
+      }
+
+      setBatchProgress({ current: 0, total: dirtyFiles.length });
+      let saved = 0;
+      const CHUNK = 10;
+      for (let i = 0; i < dirtyFiles.length; i += CHUNK) {
+        const chunk = dirtyFiles.slice(i, i + CHUNK);
+        try {
+          const res = await fetch("/api/save-image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceType: "file", files: chunk }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            saved += d.updatedCount || 0;
+            setFiles((prev) =>
+              prev.map((f) => {
+                const match = chunk.find((item) => item.id === f.id);
+                return match ? { ...f, alt: match.alt } : f;
+              })
+            );
+          }
+        } catch (e) {
+          console.error("File batch error:", e);
+        }
+        setBatchProgress({ current: Math.min(i + CHUNK, dirtyFiles.length), total: dirtyFiles.length });
+      }
+
+      setIsBatchSaving(false);
+      setFeedback({ type: "success", message: `🎉 Successfully saved ${saved} Store File ALT texts to Shopify!` });
+      if (shopify?.toast) shopify.toast.show(`🎉 Saved ${saved} Store File ALT texts!`);
+    } else if (activeTab === "collections") {
+      const dirtyCollections = collections
+        .filter((c) => (draftCollectionAlts[c.id] || "").trim() !== (c.alt || "").trim())
+        .map((c) => ({ id: c.id, altText: (draftCollectionAlts[c.id] || "").trim(), imageUrl: c.url }));
+
+      if (dirtyCollections.length === 0) {
+        setIsBatchSaving(false);
+        if (shopify?.toast) shopify.toast.show("No unsaved collection changes.");
+        return;
+      }
+
+      setBatchProgress({ current: 0, total: dirtyCollections.length });
+      let saved = 0;
+      const CHUNK = 5;
+      for (let i = 0; i < dirtyCollections.length; i += CHUNK) {
+        const chunk = dirtyCollections.slice(i, i + CHUNK);
+        try {
+          const res = await fetch("/api/save-image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceType: "collection", items: chunk }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            saved += d.updatedCount || 0;
+            setCollections((prev) =>
+              prev.map((col) => {
+                const match = chunk.find((item) => item.id === col.id);
+                return match ? { ...col, alt: match.altText } : col;
+              })
+            );
+          }
+        } catch (e) {
+          console.error("Collection batch error:", e);
+        }
+        setBatchProgress({ current: Math.min(i + CHUNK, dirtyCollections.length), total: dirtyCollections.length });
+      }
+
+      setIsBatchSaving(false);
+      setFeedback({ type: "success", message: `🎉 Successfully saved ${saved} Collection Banner ALT texts!` });
+      if (shopify?.toast) shopify.toast.show(`🎉 Saved ${saved} Collection Banner ALT texts!`);
     }
   };
 
   return (
-    <s-page heading="Image ALT Text Optimizer">
+    <s-page heading="Storewide Image ALT Optimizer">
       <div style={{ maxWidth: "1200px", margin: "0 auto", paddingBottom: "60px" }}>
-        {/* Navigation Breadcrumb / Top Bar */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
-            flexWrap: "wrap",
-            gap: "12px",
-          }}
-        >
+        {/* Navigation Breadcrumb */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <Link
-              to="/app"
-              style={{
-                color: "#2563eb",
-                textDecoration: "none",
-                fontSize: "13px",
-                fontWeight: "600",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-              }}
-            >
+            <Link to="/app" style={{ color: "#2563eb", textDecoration: "none", fontSize: "13px", fontWeight: "600" }}>
               ← Back to Dashboard
             </Link>
             <span style={{ color: "#cbd5e1" }}>|</span>
@@ -590,35 +737,122 @@ export default function ImageAltOptimizer() {
 
           <div style={{ display: "flex", gap: "8px" }}>
             <Link
-              to="/app/bulk-optimizer"
-              style={{
-                background: "#f1f5f9",
-                color: "#334155",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                textDecoration: "none",
-                fontSize: "12px",
-                fontWeight: "600",
-              }}
-            >
-              Bulk SEO Titles & Descs →
-            </Link>
-            <Link
               to="/app/seo-optimizer"
-              style={{
-                background: "#f1f5f9",
-                color: "#334155",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                textDecoration: "none",
-                fontSize: "12px",
-                fontWeight: "600",
-              }}
+              style={{ background: "#f1f5f9", color: "#334155", padding: "6px 12px", borderRadius: "6px", textDecoration: "none", fontSize: "12px", fontWeight: "600" }}
             >
               Single Product Workbench →
             </Link>
           </div>
         </div>
+
+        {/* RESOURCE TABS SWITCHER */}
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            background: "#f1f5f9",
+            padding: "6px",
+            borderRadius: "10px",
+            marginBottom: "20px",
+            border: "1px solid #e2e8f0",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab("products")}
+            style={{
+              flex: "1 1 180px",
+              padding: "10px 16px",
+              borderRadius: "8px",
+              border: "none",
+              background: activeTab === "products" ? "#ffffff" : "transparent",
+              color: activeTab === "products" ? "#0f172a" : "#64748b",
+              fontWeight: "800",
+              fontSize: "13px",
+              cursor: "pointer",
+              boxShadow: activeTab === "products" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span>📦</span> Product Images ({products.reduce((acc, p) => acc + p.media.length, 0)})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("files")}
+            style={{
+              flex: "1 1 180px",
+              padding: "10px 16px",
+              borderRadius: "8px",
+              border: "none",
+              background: activeTab === "files" ? "#ffffff" : "transparent",
+              color: activeTab === "files" ? "#0f172a" : "#64748b",
+              fontWeight: "800",
+              fontSize: "13px",
+              cursor: "pointer",
+              boxShadow: activeTab === "files" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span>🖼️</span> Store Files & Banners ({files.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("collections")}
+            style={{
+              flex: "1 1 180px",
+              padding: "10px 16px",
+              borderRadius: "8px",
+              border: "none",
+              background: activeTab === "collections" ? "#ffffff" : "transparent",
+              color: activeTab === "collections" ? "#0f172a" : "#64748b",
+              fontWeight: "800",
+              fontSize: "13px",
+              cursor: "pointer",
+              boxShadow: activeTab === "collections" ? "0 2px 6px rgba(0,0,0,0.06)" : "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span>📁</span> Collection Banners ({collections.length})
+          </button>
+        </div>
+
+        {/* Scope warning alert if write_files permission is pending */}
+        {filesScopeError && activeTab === "files" && (
+          <div
+            style={{
+              background: "#fffbeb",
+              border: "1.5px solid #fde68a",
+              borderRadius: "10px",
+              padding: "14px 18px",
+              marginBottom: "20px",
+              color: "#92400e",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+            }}
+          >
+            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <div>
+              <strong>Shopify Files Scope Pending:</strong> If your files library does not show images, please reload the app in your Shopify Admin to accept the newly added <code>write_files</code> permission.
+            </div>
+          </div>
+        )}
 
         {/* Feedback Alert */}
         {feedback && (
@@ -630,47 +864,15 @@ export default function ImageAltOptimizer() {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              background:
-                feedback.type === "success"
-                  ? "#f0fdf4"
-                  : feedback.type === "error"
-                  ? "#fef2f2"
-                  : feedback.type === "warning"
-                  ? "#fffbeb"
-                  : "#eff6ff",
-              border: `1px solid ${
-                feedback.type === "success"
-                  ? "#86efac"
-                  : feedback.type === "error"
-                  ? "#fca5a5"
-                  : feedback.type === "warning"
-                  ? "#fde68a"
-                  : "#93c5fd"
-              }`,
-              color:
-                feedback.type === "success"
-                  ? "#166534"
-                  : feedback.type === "error"
-                  ? "#991b1b"
-                  : feedback.type === "warning"
-                  ? "#92400e"
-                  : "#1e40af",
+              background: feedback.type === "success" ? "#f0fdf4" : feedback.type === "error" ? "#fef2f2" : "#eff6ff",
+              border: `1px solid ${feedback.type === "success" ? "#86efac" : feedback.type === "error" ? "#fca5a5" : "#93c5fd"}`,
+              color: feedback.type === "success" ? "#166534" : feedback.type === "error" ? "#991b1b" : "#1e40af",
               fontSize: "14px",
               fontWeight: "600",
             }}
           >
             <div>{feedback.message}</div>
-            <button
-              type="button"
-              onClick={() => setFeedback(null)}
-              style={{
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                fontWeight: "bold",
-                color: "inherit",
-              }}
-            >
+            <button type="button" onClick={() => setFeedback(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "inherit", fontWeight: "bold" }}>
               ✕
             </button>
           </div>
@@ -678,40 +880,19 @@ export default function ImageAltOptimizer() {
 
         {/* Batch Saving Progress Bar */}
         {isBatchSaving && (
-          <div
-            style={{
-              background: "#ffffff",
-              border: "1.5px solid #3b82f6",
-              borderRadius: "10px",
-              padding: "16px 20px",
-              marginBottom: "20px",
-              boxShadow: "0 4px 12px rgba(59, 130, 246, 0.1)",
-            }}
-          >
+          <div style={{ background: "#ffffff", border: "1.5px solid #3b82f6", borderRadius: "10px", padding: "16px 20px", marginBottom: "20px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
               <span style={{ fontWeight: "700", color: "#1e3a8a", fontSize: "14px" }}>
-                ⏳ Saving Image ALT Texts to Shopify...
+                ⏳ Saving {stats.label} ALT Texts to Shopify...
               </span>
               <span style={{ fontWeight: "700", color: "#2563eb", fontSize: "14px" }}>
-                {batchProgress.current} / {batchProgress.total} Products Processed
+                {batchProgress.current} / {batchProgress.total} Items Processed
               </span>
             </div>
-            <div
-              style={{
-                width: "100%",
-                height: "10px",
-                background: "#e2e8f0",
-                borderRadius: "999px",
-                overflow: "hidden",
-              }}
-            >
+            <div style={{ width: "100%", height: "10px", background: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
               <div
                 style={{
-                  width: `${
-                    batchProgress.total > 0
-                      ? Math.round((batchProgress.current / batchProgress.total) * 100)
-                      : 0
-                  }%`,
+                  width: `${batchProgress.total > 0 ? Math.round((batchProgress.current / batchProgress.total) * 100) : 0}%`,
                   height: "100%",
                   background: "linear-gradient(90deg, #3b82f6, #06b6d4)",
                   transition: "width 0.3s ease",
@@ -721,126 +902,55 @@ export default function ImageAltOptimizer() {
           </div>
         )}
 
-        {/* STATS OVERVIEW CARDS */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "16px",
-            marginBottom: "24px",
-          }}
-        >
-          {/* Card 1: Total Catalog Images */}
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: "10px",
-              padding: "18px 20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
-          >
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>
-              Total Product Images
-            </div>
-            <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "4px" }}>
-              {stats.totalImages}
-            </div>
-            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-              Across {stats.totalProducts} catalog products
-            </div>
+        {/* STATS OVERVIEW CARDS FOR ACTIVE TAB */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+          <div style={{ background: "#ffffff", borderRadius: "10px", padding: "18px 20px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase" }}>Total {stats.label}</div>
+            <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "4px" }}>{stats.total}</div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>In current view</div>
           </div>
 
-          {/* Card 2: Optimized Images */}
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: "10px",
-              padding: "18px 20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
-          >
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "#166534", textTransform: "uppercase" }}>
-              Images With ALT Text
-            </div>
-            <div style={{ fontSize: "28px", fontWeight: "800", color: "#16a34a", marginTop: "4px" }}>
-              {stats.imagesWithAlt}
-            </div>
-            <div style={{ fontSize: "12px", color: "#166534", marginTop: "4px" }}>
-              Accessible & SEO indexed
-            </div>
+          <div style={{ background: "#ffffff", borderRadius: "10px", padding: "18px 20px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#166534", textTransform: "uppercase" }}>With ALT Text</div>
+            <div style={{ fontSize: "28px", fontWeight: "800", color: "#16a34a", marginTop: "4px" }}>{stats.withAlt}</div>
+            <div style={{ fontSize: "12px", color: "#166534", marginTop: "4px" }}>Accessible & indexed</div>
           </div>
 
-          {/* Card 3: Missing ALT Text */}
-          <div
-            style={{
-              background: stats.missingAlt > 0 ? "#fff7ed" : "#f8fafc",
-              borderRadius: "10px",
-              padding: "18px 20px",
-              border: `1px solid ${stats.missingAlt > 0 ? "#fed7aa" : "#e2e8f0"}`,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
-          >
-            <div style={{ fontSize: "12px", fontWeight: "700", color: stats.missingAlt > 0 ? "#c2410c" : "#64748b", textTransform: "uppercase" }}>
-              Missing ALT Text
-            </div>
-            <div style={{ fontSize: "28px", fontWeight: "800", color: stats.missingAlt > 0 ? "#ea580c" : "#64748b", marginTop: "4px" }}>
-              {stats.missingAlt}
-            </div>
-            <div style={{ fontSize: "12px", color: stats.missingAlt > 0 ? "#c2410c" : "#64748b", marginTop: "4px" }}>
-              {stats.productsWithMissing} products need optimization
-            </div>
+          <div style={{ background: stats.missing > 0 ? "#fff7ed" : "#f8fafc", borderRadius: "10px", padding: "18px 20px", border: `1px solid ${stats.missing > 0 ? "#fed7aa" : "#e2e8f0"}` }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: stats.missing > 0 ? "#c2410c" : "#64748b", textTransform: "uppercase" }}>Missing ALT Text</div>
+            <div style={{ fontSize: "28px", fontWeight: "800", color: stats.missing > 0 ? "#ea580c" : "#64748b", marginTop: "4px" }}>{stats.missing}</div>
+            <div style={{ fontSize: "12px", color: stats.missing > 0 ? "#c2410c" : "#64748b", marginTop: "4px" }}>Requires optimization</div>
           </div>
 
-          {/* Card 4: Health Coverage */}
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: "10px",
-              padding: "18px 20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
-          >
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase" }}>
-              Image SEO Health
+          <div style={{ background: "#ffffff", borderRadius: "10px", padding: "18px 20px", border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#2563eb", textTransform: "uppercase" }}>Image SEO Health</div>
+            <div style={{ fontSize: "28px", fontWeight: "800", color: stats.pct >= 80 ? "#16a34a" : stats.pct >= 50 ? "#d97706" : "#dc2626", marginTop: "4px" }}>
+              {stats.pct}%
             </div>
-            <div style={{ fontSize: "28px", fontWeight: "800", color: stats.coveragePct >= 80 ? "#16a34a" : stats.coveragePct >= 50 ? "#d97706" : "#dc2626", marginTop: "4px" }}>
-              {stats.coveragePct}%
-            </div>
-            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-              Target: 100% catalog coverage
-            </div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Coverage target: 100%</div>
           </div>
         </div>
 
-        {/* SMART TEMPLATE & GENERATION ENGINE */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
-            border: "1.5px solid #cbd5e1",
-            borderRadius: "12px",
-            padding: "20px 24px",
-            marginBottom: "24px",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
-          }}
-        >
+        {/* SMART TEMPLATE CONTROL BAR */}
+        <div style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)", border: "1.5px solid #cbd5e1", borderRadius: "12px", padding: "20px 24px", marginBottom: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
             <div>
               <div style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>✨</span> Smart AI Image ALT Template
+                <span>✨</span> Smart AI Template for {stats.label}
               </div>
               <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0" }}>
-                Define how ALT texts should be crafted across your catalog. Dynamic tokens will automatically pull product titles, target keywords, and brand names.
+                {activeTab === "products"
+                  ? "Define dynamic tokens for products, gallery view angles, and target keywords."
+                  : activeTab === "files"
+                  ? "Automatically clean raw filenames into readable, search-optimized descriptions."
+                  : "Optimize category headers with collection titles and brand branding."}
               </p>
             </div>
 
-            {/* Quick Bulk Action Buttons */}
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <button
                 type="button"
-                onClick={handleGenerateAllMissing}
+                onClick={handleAutoGenerateMissing}
                 style={{
                   background: "linear-gradient(135deg, #3b82f6, #2563eb)",
                   color: "#ffffff",
@@ -850,20 +960,19 @@ export default function ImageAltOptimizer() {
                   fontSize: "13px",
                   fontWeight: "700",
                   cursor: "pointer",
-                  boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
                 }}
               >
-                <span>✨</span> Auto-Generate All Missing ({stats.missingAlt})
+                <span>✨</span> Auto-Generate Missing ({stats.missing})
               </button>
 
               {dirtyCount > 0 && (
                 <button
                   type="button"
                   disabled={isBatchSaving}
-                  onClick={handleBatchSaveAll}
+                  onClick={handleBatchSave}
                   style={{
                     background: isBatchSaving ? "#94a3b8" : "linear-gradient(135deg, #10b981, #059669)",
                     color: "#ffffff",
@@ -873,76 +982,61 @@ export default function ImageAltOptimizer() {
                     fontSize: "13px",
                     fontWeight: "800",
                     cursor: isBatchSaving ? "wait" : "pointer",
-                    boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "6px",
                   }}
                 >
-                  <span>💾</span> {isBatchSaving ? "Saving..." : `Save All Changes (${dirtyCount})`}
-                </button>
-              )}
-
-              {dirtyCount > 0 && !isBatchSaving && (
-                <button
-                  type="button"
-                  onClick={handleDiscardChanges}
-                  style={{
-                    background: "#ffffff",
-                    color: "#dc2626",
-                    border: "1px solid #fca5a5",
-                    borderRadius: "8px",
-                    padding: "8px 14px",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                  }}
-                >
-                  Discard Changes
+                  <span>💾</span> {isBatchSaving ? "Saving..." : `Save Changes (${dirtyCount})`}
                 </button>
               )}
             </div>
           </div>
 
-          {/* Template Presets */}
+          {/* Presets */}
           <div style={{ marginTop: "16px" }}>
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px" }}>
-              Template Presets:
-            </div>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px" }}>Presets:</div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {ALT_PRESETS.map((preset) => {
-                const isActive = activeTemplate === preset.template;
+              {(activeTab === "products" ? ALT_PRESETS : activeTab === "files" ? FILE_ALT_PRESETS : COLLECTION_ALT_PRESETS).map((p) => {
+                const currentTpl = activeTab === "products" ? productTemplate : activeTab === "files" ? fileTemplate : collectionTemplate;
+                const isAct = currentTpl === p.template;
                 return (
                   <button
-                    key={preset.id}
+                    key={p.id}
                     type="button"
-                    onClick={() => setActiveTemplate(preset.template)}
+                    onClick={() => {
+                      if (activeTab === "products") setProductTemplate(p.template);
+                      else if (activeTab === "files") setFileTemplate(p.template);
+                      else setCollectionTemplate(p.template);
+                    }}
                     style={{
-                      background: isActive ? "#0f172a" : "#ffffff",
-                      color: isActive ? "#ffffff" : "#334155",
-                      border: `1px solid ${isActive ? "#0f172a" : "#cbd5e1"}`,
+                      background: isAct ? "#0f172a" : "#ffffff",
+                      color: isAct ? "#ffffff" : "#334155",
+                      border: `1px solid ${isAct ? "#0f172a" : "#cbd5e1"}`,
                       borderRadius: "6px",
                       padding: "6px 12px",
                       fontSize: "12px",
                       fontWeight: "700",
                       cursor: "pointer",
-                      transition: "all 0.15s ease",
                     }}
                   >
-                    {preset.label}
+                    {p.label}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Template Input & Token Pills */}
+          {/* Input & Token Chips */}
           <div style={{ marginTop: "14px" }}>
             <input
               type="text"
-              value={activeTemplate}
-              onChange={(e) => setActiveTemplate(e.target.value)}
-              placeholder="e.g. {product_title} - {keyword} by {brand}"
+              value={activeTab === "products" ? productTemplate : activeTab === "files" ? fileTemplate : collectionTemplate}
+              onChange={(e) => {
+                if (activeTab === "products") setProductTemplate(e.target.value);
+                else if (activeTab === "files") setFileTemplate(e.target.value);
+                else setCollectionTemplate(e.target.value);
+              }}
               style={{
                 width: "100%",
                 padding: "10px 14px",
@@ -952,25 +1046,40 @@ export default function ImageAltOptimizer() {
                 borderRadius: "8px",
                 border: "1.5px solid #94a3b8",
                 background: "#ffffff",
-                color: "#0f172a",
-                outline: "none",
                 boxSizing: "border-box",
+                outline: "none",
               }}
             />
 
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "11px", fontWeight: "700", color: "#64748b" }}>Click to insert token:</span>
-              {[
-                { token: "{product_title}", label: "+ Product Title" },
-                { token: "{keyword}", label: "+ Target Keyword" },
-                { token: "{brand}", label: "+ Brand/Vendor" },
-                { token: "{view}", label: "+ Image Angle/View" },
-                { token: "{store_name}", label: "+ Store Name" },
-              ].map((t) => (
+              {(activeTab === "products"
+                ? [
+                    { token: "{product_title}", label: "+ Product Title" },
+                    { token: "{keyword}", label: "+ Keyword" },
+                    { token: "{brand}", label: "+ Brand" },
+                    { token: "{view}", label: "+ Angle/View" },
+                    { token: "{store_name}", label: "+ Store Name" },
+                  ]
+                : activeTab === "files"
+                ? [
+                    { token: "{filename}", label: "+ Cleaned Filename" },
+                    { token: "{store_name}", label: "+ Store Name" },
+                  ]
+                : [
+                    { token: "{collection_title}", label: "+ Collection Title" },
+                    { token: "{store_name}", label: "+ Store Name" },
+                  ]
+              ).map((t) => (
                 <button
                   key={t.token}
                   type="button"
-                  onClick={() => handleInsertToken(t.token)}
+                  onClick={() => {
+                    const append = (prev) => `${prev}${prev.endsWith(" ") || prev === "" ? "" : " "}${t.token}`;
+                    if (activeTab === "products") setProductTemplate(append);
+                    else if (activeTab === "files") setFileTemplate(append);
+                    else setCollectionTemplate(append);
+                  }}
                   style={{
                     background: "#e2e8f0",
                     border: "none",
@@ -988,95 +1097,46 @@ export default function ImageAltOptimizer() {
             </div>
           </div>
 
-          {/* Real-time Sample Preview */}
+          {/* Live Sample Preview */}
           {samplePreview && (
-            <div
-              style={{
-                marginTop: "14px",
-                background: "#ffffff",
-                border: "1px dashed #94a3b8",
-                borderRadius: "8px",
-                padding: "10px 14px",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                flexWrap: "wrap",
-              }}
-            >
-              <span style={{ fontSize: "11px", fontWeight: "800", color: "#2563eb", textTransform: "uppercase" }}>
-                Live Sample Preview:
-              </span>
-              <span style={{ fontSize: "13px", color: "#0f172a", fontStyle: "italic", flex: 1 }}>
-                &ldquo;{samplePreview}&rdquo;
-              </span>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: "700",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  background: isAltOk(samplePreview) ? "#dcfce7" : "#fee2e2",
-                  color: isAltOk(samplePreview) ? "#166534" : "#991b1b",
-                }}
-              >
+            <div style={{ marginTop: "14px", background: "#ffffff", border: "1px dashed #94a3b8", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "11px", fontWeight: "800", color: "#2563eb", textTransform: "uppercase" }}>Sample Preview:</span>
+              <span style={{ fontSize: "13px", color: "#0f172a", fontStyle: "italic", flex: 1 }}>&ldquo;{samplePreview}&rdquo;</span>
+              <span style={{ fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: isAltOk(samplePreview) ? "#dcfce7" : "#fee2e2", color: isAltOk(samplePreview) ? "#166534" : "#991b1b" }}>
                 {samplePreview.length} / {ALT_MAX} chars ({isAltOk(samplePreview) ? "Optimal" : "Too long"})
               </span>
             </div>
           )}
         </div>
 
-        {/* SEARCH & FILTER CONTROLS */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "12px",
-            marginBottom: "18px",
-          }}
-        >
-          {/* Search Box */}
+        {/* SEARCH & FILTERS */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
           <div style={{ flex: "1 1 300px", maxWidth: "450px" }}>
             <input
               type="text"
-              placeholder="🔍 Search products by title or handle..."
+              placeholder={`🔍 Search ${stats.label.toLowerCase()}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                fontSize: "13px",
-                borderRadius: "8px",
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
+              style={{ width: "100%", padding: "10px 14px", fontSize: "13px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#ffffff", boxSizing: "border-box", outline: "none" }}
             />
           </div>
 
-          {/* Filter Pills */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {[
-              { id: "all", label: `All Products (${products.length})` },
-              {
-                id: "missing",
-                label: `⚠️ Missing ALT (${stats.productsWithMissing})`,
-                highlight: stats.productsWithMissing > 0,
-              },
-              { id: "optimized", label: `✅ Fully Optimized (${products.length - stats.productsWithMissing})` },
+              { id: "all", label: `All (${stats.total})` },
+              { id: "missing", label: `⚠️ Missing ALT (${stats.missing})`, highlight: stats.missing > 0 },
+              { id: "optimized", label: `✅ Optimized (${stats.withAlt})` },
             ].map((f) => {
-              const isSelected = filterMode === f.id;
+              const isSel = filterMode === f.id;
               return (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setFilterMode(f.id)}
                   style={{
-                    background: isSelected ? "#0f172a" : "#ffffff",
-                    color: isSelected ? "#ffffff" : f.highlight ? "#ea580c" : "#475569",
-                    border: `1.5px solid ${isSelected ? "#0f172a" : f.highlight ? "#fdba74" : "#cbd5e1"}`,
+                    background: isSel ? "#0f172a" : "#ffffff",
+                    color: isSel ? "#ffffff" : f.highlight ? "#ea580c" : "#475569",
+                    border: `1.5px solid ${isSel ? "#0f172a" : f.highlight ? "#fdba74" : "#cbd5e1"}`,
                     borderRadius: "8px",
                     padding: "8px 14px",
                     fontSize: "12px",
@@ -1091,334 +1151,118 @@ export default function ImageAltOptimizer() {
           </div>
         </div>
 
-        {/* PRODUCTS & IMAGES LIST */}
-        {filteredProducts.length === 0 ? (
-          <div
-            style={{
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: "12px",
-              padding: "60px 20px",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ fontSize: "40px", marginBottom: "12px" }}>🖼️</div>
-            <div style={{ fontSize: "18px", fontWeight: "800", color: "#0f172a" }}>
-              {filterMode === "missing"
-                ? "Awesome! No images are missing ALT text."
-                : "No products matched your search."}
-            </div>
-            <p style={{ fontSize: "14px", color: "#64748b", maxWidth: "450px", margin: "8px auto 16px auto" }}>
-              {filterMode === "missing"
-                ? "Every product image in your catalog has an accessible, SEO-indexed ALT text."
-                : "Try adjusting your search query or reset the filter to view all products."}
-            </p>
-            {filterMode !== "all" && (
-              <button
-                type="button"
-                onClick={() => setFilterMode("all")}
-                style={{
-                  background: "#0f172a",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "8px 16px",
-                  fontSize: "13px",
-                  fontWeight: "700",
-                  cursor: "pointer",
-                }}
-              >
-                View All Products
-              </button>
-            )}
-          </div>
-        ) : (
+        {/* TAB CONTENT: PRODUCTS */}
+        {activeTab === "products" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            {filteredProducts.map((product) => {
-              const productMissingCount = product.media.filter(
-                (m) => !getAltValue(m.id, m.alt).trim()
-              ).length;
-              const isProductSaving = savingProductId === product.id;
-
-              // Check if any image in this product has dirty changes
-              const productHasDirty = product.media.some((m) => {
-                const draft = (draftAlts[m.id] || "").trim();
-                const original = (m.alt || "").trim();
-                return draft !== original;
-              });
-
-              return (
-                <div
-                  key={product.id}
-                  style={{
-                    background: "#ffffff",
-                    border: `1.5px solid ${
-                      productMissingCount > 0 ? "#fed7aa" : productHasDirty ? "#93c5fd" : "#e2e8f0"
-                    }`,
-                    borderRadius: "12px",
-                    padding: "20px",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.03)",
-                  }}
-                >
-                  {/* Product Header */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      borderBottom: "1px solid #f1f5f9",
-                      paddingBottom: "14px",
-                      marginBottom: "16px",
-                      flexWrap: "wrap",
-                      gap: "12px",
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a" }}>
-                          {product.title}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: "700",
-                            padding: "2px 8px",
-                            borderRadius: "999px",
-                            background: product.status === "ACTIVE" ? "#dcfce7" : "#f1f5f9",
-                            color: product.status === "ACTIVE" ? "#166534" : "#64748b",
-                          }}
-                        >
-                          {product.status}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: "700",
-                            padding: "2px 8px",
-                            borderRadius: "999px",
-                            background: productMissingCount > 0 ? "#ffedd5" : "#dcfce7",
-                            color: productMissingCount > 0 ? "#9a3412" : "#166534",
-                          }}
-                        >
-                          {productMissingCount > 0
-                            ? `⚠️ ${productMissingCount} of ${product.media.length} Images Missing ALT`
-                            : `✅ All ${product.media.length} Images Optimized`}
+            {filteredProducts.length === 0 ? (
+              <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "36px", marginBottom: "10px" }}>📦</div>
+                <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>No product images found matching criteria.</div>
+              </div>
+            ) : (
+              filteredProducts.map((p) => {
+                const missingCount = p.media.filter((m) => !getProductAlt(m.id, m.alt).trim()).length;
+                return (
+                  <div key={p.id} style={{ background: "#ffffff", border: `1.5px solid ${missingCount > 0 ? "#fed7aa" : "#e2e8f0"}`, borderRadius: "12px", padding: "20px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f5f9", paddingBottom: "12px", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                      <div>
+                        <span style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>{p.title}</span>
+                        <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: missingCount > 0 ? "#ffedd5" : "#dcfce7", color: missingCount > 0 ? "#9a3412" : "#166534" }}>
+                          {missingCount > 0 ? `⚠️ ${missingCount} of ${p.media.length} Missing ALT` : `✅ All ${p.media.length} Optimized`}
                         </span>
                       </div>
 
-                      <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-                        Vendor: <strong>{product.vendor}</strong> &bull; Handle: <code>{product.handle}</code>
-                        {product.keywords.length > 0 && (
-                          <span style={{ marginLeft: "10px" }}>
-                            &bull; Target Keywords: <em>{product.keywords.join(", ")}</em>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Product Action Buttons */}
-                    <div style={{ display: "flex", gap: "8px" }}>
                       <button
                         type="button"
-                        onClick={() => handleGenerateProduct(product)}
-                        style={{
-                          background: "#f8fafc",
-                          border: "1px solid #cbd5e1",
-                          color: "#1e293b",
-                          borderRadius: "6px",
-                          padding: "6px 12px",
-                          fontSize: "12px",
-                          fontWeight: "700",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
+                        onClick={() => {
+                          const drafts = {};
+                          p.media.forEach((m, idx) => {
+                            drafts[m.id] = generateImageAltText({
+                              productTitle: p.title,
+                              keyword: p.keywords?.[idx % (p.keywords.length || 1)] || "",
+                              keywords: p.keywords,
+                              brand: p.vendor,
+                              storeName: shop.name,
+                              imageIndex: idx,
+                              totalImages: p.media.length,
+                              template: productTemplate,
+                            });
+                          });
+                          setDraftProductAlts((prev) => ({ ...prev, ...drafts }));
+                          if (shopify?.toast) shopify.toast.show(`Generated for ${p.title}`);
                         }}
+                        style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "5px 12px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
                       >
-                        <span>✨</span> Generate for Product
+                        ✨ Generate for Product
                       </button>
-
-                      {productHasDirty && (
-                        <button
-                          type="button"
-                          disabled={isProductSaving}
-                          onClick={() => handleSaveProduct(product)}
-                          style={{
-                            background: isProductSaving ? "#94a3b8" : "#2563eb",
-                            color: "#ffffff",
-                            border: "none",
-                            borderRadius: "6px",
-                            padding: "6px 14px",
-                            fontSize: "12px",
-                            fontWeight: "700",
-                            cursor: isProductSaving ? "wait" : "pointer",
-                          }}
-                        >
-                          {isProductSaving ? "Saving..." : "💾 Save Images"}
-                        </button>
-                      )}
                     </div>
-                  </div>
 
-                  {/* Product Images Grid / Rows */}
-                  {product.media.length === 0 ? (
-                    <div style={{ color: "#94a3b8", fontSize: "13px", fontStyle: "italic", padding: "12px 0" }}>
-                      No images found for this product in Shopify.
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                      {product.media.map((media, idx) => {
-                        const currentAlt = getAltValue(media.id, media.alt);
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {p.media.map((m, idx) => {
+                        const currentAlt = getProductAlt(m.id, m.alt);
                         const isMissing = !currentAlt.trim();
-                        const isDirty = (draftAlts[media.id] || "").trim() !== (media.alt || "").trim();
-                        const isSavingThis = savingMediaId === media.id;
-                        const altLength = currentAlt.length;
-                        const isOptimal = isAltOk(currentAlt);
-                        const viewLabel = getImageViewLabel(idx, product.media.length);
+                        const isDirty = (draftProductAlts[m.id] || "").trim() !== (m.alt || "").trim();
+                        const isSavingThis = savingId === m.id;
+                        const len = currentAlt.length;
+                        const isOpt = isAltOk(currentAlt);
+                        const viewLabel = getImageViewLabel(idx, p.media.length);
 
                         return (
-                          <div
-                            key={media.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "16px",
-                              padding: "12px",
-                              borderRadius: "8px",
-                              background: isDirty ? "#f0fdf4" : "#f8fafc",
-                              border: `1px solid ${isDirty ? "#86efac" : "#e2e8f0"}`,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {/* Thumbnail & Position */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "120px" }}>
-                              <div
-                                style={{
-                                  width: "56px",
-                                  height: "56px",
-                                  borderRadius: "6px",
-                                  overflow: "hidden",
-                                  border: "1px solid #cbd5e1",
-                                  background: "#ffffff",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <img
-                                  src={media.url}
-                                  alt={currentAlt || "Product image"}
-                                  style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                  }}
-                                />
-                              </div>
-
-                              <div>
-                                <div style={{ fontSize: "12px", fontWeight: "800", color: "#0f172a" }}>
-                                  #{idx + 1}
-                                </div>
-                                <div style={{ fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
-                                  {viewLabel || "Main Image"}
-                                </div>
-                              </div>
+                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "10px 14px", borderRadius: "8px", background: isDirty ? "#f0fdf4" : "#f8fafc", border: `1px solid ${isDirty ? "#86efac" : "#e2e8f0"}`, flexWrap: "wrap" }}>
+                            <div style={{ width: "50px", height: "50px", borderRadius: "6px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#ffffff", flexShrink: 0 }}>
+                              <img src={m.url} alt={currentAlt || "Product"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             </div>
 
-                            {/* Editable ALT Text Input */}
-                            <div style={{ flex: 1, minWidth: "260px" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  marginBottom: "4px",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <span style={{ fontSize: "11px", fontWeight: "700", color: "#475569" }}>
-                                  Image ALT Text:
-                                </span>
+                            <div style={{ minWidth: "90px" }}>
+                              <div style={{ fontSize: "12px", fontWeight: "800", color: "#0f172a" }}>#{idx + 1}</div>
+                              <div style={{ fontSize: "11px", color: "#64748b" }}>{viewLabel || "Main"}</div>
+                            </div>
 
-                                <span
-                                  style={{
-                                    fontSize: "11px",
-                                    fontWeight: "700",
-                                    color: isMissing
-                                      ? "#ea580c"
-                                      : altLength <= ALT_WARN
-                                      ? "#16a34a"
-                                      : altLength <= ALT_MAX
-                                      ? "#d97706"
-                                      : "#dc2626",
-                                  }}
-                                >
-                                  {isMissing
-                                    ? "⚠️ Empty (Needs ALT)"
-                                    : `${altLength} / ${ALT_MAX} chars ${isOptimal ? "✓" : "(Too long)"}`}
+                            <div style={{ flex: 1, minWidth: "240px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                                <span style={{ fontSize: "11px", fontWeight: "600", color: "#475569" }}>ALT Text:</span>
+                                <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
+                                  {isMissing ? "⚠️ Empty" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
                                 </span>
                               </div>
-
                               <input
                                 type="text"
                                 value={currentAlt}
-                                onChange={(e) => handleDraftChange(media.id, e.target.value)}
-                                placeholder="Enter descriptive image alt text..."
-                                style={{
-                                  width: "100%",
-                                  padding: "8px 12px",
-                                  fontSize: "13px",
-                                  borderRadius: "6px",
-                                  border: `1.5px solid ${
-                                    isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"
-                                  }`,
-                                  background: "#ffffff",
-                                  color: "#0f172a",
-                                  boxSizing: "border-box",
-                                  outline: "none",
-                                }}
+                                onChange={(e) => setDraftProductAlts((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                                placeholder="Enter image alt text..."
+                                style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "6px", border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`, background: "#ffffff", boxSizing: "border-box", outline: "none" }}
                               />
                             </div>
 
-                            {/* Actions for this Image */}
-                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            <div style={{ display: "flex", gap: "6px" }}>
                               <button
                                 type="button"
-                                onClick={() => handleGenerateSingle(product, media.id, idx)}
-                                title="Generate ALT text with AI"
-                                style={{
-                                  background: "#ffffff",
-                                  border: "1px solid #cbd5e1",
-                                  borderRadius: "6px",
-                                  padding: "7px 10px",
-                                  fontSize: "12px",
-                                  fontWeight: "700",
-                                  color: "#2563eb",
-                                  cursor: "pointer",
+                                onClick={() => {
+                                  const gen = generateImageAltText({
+                                    productTitle: p.title,
+                                    keyword: p.keywords?.[idx % (p.keywords.length || 1)] || "",
+                                    keywords: p.keywords,
+                                    brand: p.vendor,
+                                    storeName: shop.name,
+                                    imageIndex: idx,
+                                    totalImages: p.media.length,
+                                    template: productTemplate,
+                                  });
+                                  setDraftProductAlts((prev) => ({ ...prev, [m.id]: gen }));
                                 }}
+                                style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
                               >
-                                ✨ AI Suggest
+                                ✨ AI
                               </button>
 
                               {isDirty && (
                                 <button
                                   type="button"
                                   disabled={isSavingThis}
-                                  onClick={() => handleSaveSingle(product.id, media.id)}
-                                  title="Save to Shopify"
-                                  style={{
-                                    background: isSavingThis ? "#94a3b8" : "#16a34a",
-                                    color: "#ffffff",
-                                    border: "none",
-                                    borderRadius: "6px",
-                                    padding: "7px 12px",
-                                    fontSize: "12px",
-                                    fontWeight: "700",
-                                    cursor: isSavingThis ? "wait" : "pointer",
-                                  }}
+                                  onClick={() => handleSaveProductMedia(p.id, m.id)}
+                                  style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "11px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
                                 >
-                                  {isSavingThis ? "Saving..." : "💾 Save"}
+                                  {isSavingThis ? "..." : "💾 Save"}
                                 </button>
                               )}
                             </div>
@@ -1426,30 +1270,175 @@ export default function ImageAltOptimizer() {
                         );
                       })}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* TAB CONTENT: STORE FILES (CONTENT -> FILES) */}
+        {activeTab === "files" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {filteredFiles.length === 0 ? (
+              <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "36px", marginBottom: "10px" }}>🖼️</div>
+                <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>No store files found in Content &rarr; Files matching criteria.</div>
+                <p style={{ fontSize: "13px", color: "#64748b", margin: "6px auto 0 auto", maxWidth: "450px" }}>
+                  Upload hero banners, sliders, and logos in your Shopify Admin under <strong>Content &rarr; Files</strong> to optimize them here.
+                </p>
+              </div>
+            ) : (
+              filteredFiles.map((f) => {
+                const currentAlt = getFileAlt(f.id, f.alt);
+                const isMissing = !currentAlt.trim();
+                const isDirty = (draftFileAlts[f.id] || "").trim() !== (f.alt || "").trim();
+                const isSavingThis = savingId === f.id;
+                const len = currentAlt.length;
+                const isOpt = isAltOk(currentAlt);
+
+                return (
+                  <div key={f.id} style={{ background: "#ffffff", border: `1.5px solid ${isMissing ? "#fed7aa" : isDirty ? "#86efac" : "#e2e8f0"}`, borderRadius: "10px", padding: "16px 18px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#f8fafc", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <img src={f.url} alt={currentAlt || f.filename} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+
+                    <div style={{ minWidth: "160px", maxWidth: "220px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: "800", color: "#0f172a", wordBreak: "break-word" }}>{f.filename}</div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                        {f.width && f.height ? `${f.width}×${f.height}px` : "Store Asset"}
+                      </div>
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: "260px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700", color: "#475569" }}>File ALT Tag:</span>
+                        <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
+                          {isMissing ? "⚠️ Missing ALT" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={currentAlt}
+                        onChange={(e) => setDraftFileAlts((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                        placeholder="Enter descriptive ALT text for this banner..."
+                        style={{ width: "100%", padding: "8px 12px", fontSize: "13px", borderRadius: "6px", border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`, background: "#ffffff", boxSizing: "border-box", outline: "none" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gen = generateStoreFileAltText({ filename: f.filename, url: f.url, storeName: shop.name, template: fileTemplate });
+                          setDraftFileAlts((prev) => ({ ...prev, [f.id]: gen }));
+                        }}
+                        style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
+                      >
+                        ✨ AI Suggest
+                      </button>
+
+                      {isDirty && (
+                        <button
+                          type="button"
+                          disabled={isSavingThis}
+                          onClick={() => handleSaveFile(f.id)}
+                          style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", padding: "7px 14px", fontSize: "12px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
+                        >
+                          {isSavingThis ? "..." : "💾 Save"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* TAB CONTENT: COLLECTION BANNERS */}
+        {activeTab === "collections" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {filteredCollections.length === 0 ? (
+              <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "36px", marginBottom: "10px" }}>📁</div>
+                <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>No collections with banner images found.</div>
+                <p style={{ fontSize: "13px", color: "#64748b", margin: "6px auto 0 auto", maxWidth: "450px" }}>
+                  Add a collection image in your Shopify Admin under <strong>Products &rarr; Collections</strong> to optimize its banner ALT tag here.
+                </p>
+              </div>
+            ) : (
+              filteredCollections.map((c) => {
+                const currentAlt = getCollectionAlt(c.id, c.alt);
+                const isMissing = !currentAlt.trim();
+                const isDirty = (draftCollectionAlts[c.id] || "").trim() !== (c.alt || "").trim();
+                const isSavingThis = savingId === c.id;
+                const len = currentAlt.length;
+                const isOpt = isAltOk(currentAlt);
+
+                return (
+                  <div key={c.id} style={{ background: "#ffffff", border: `1.5px solid ${isMissing ? "#fed7aa" : isDirty ? "#86efac" : "#e2e8f0"}`, borderRadius: "10px", padding: "16px 18px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#f8fafc", flexShrink: 0 }}>
+                      <img src={c.url} alt={currentAlt || c.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+
+                    <div style={{ minWidth: "160px", maxWidth: "220px" }}>
+                      <div style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>{c.title}</div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                        Handle: <code>{c.handle}</code>
+                      </div>
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: "260px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: "700", color: "#475569" }}>Collection Banner ALT:</span>
+                        <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
+                          {isMissing ? "⚠️ Missing ALT" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={currentAlt}
+                        onChange={(e) => setDraftCollectionAlts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                        placeholder="Enter descriptive ALT text for this collection banner..."
+                        style={{ width: "100%", padding: "8px 12px", fontSize: "13px", borderRadius: "6px", border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`, background: "#ffffff", boxSizing: "border-box", outline: "none" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gen = generateCollectionAltText({ collectionTitle: c.title, storeName: shop.name, template: collectionTemplate });
+                          setDraftCollectionAlts((prev) => ({ ...prev, [c.id]: gen }));
+                        }}
+                        style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
+                      >
+                        ✨ AI Suggest
+                      </button>
+
+                      {isDirty && (
+                        <button
+                          type="button"
+                          disabled={isSavingThis}
+                          onClick={() => handleSaveCollection(c)}
+                          style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", padding: "7px 14px", fontSize: "12px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
+                        >
+                          {isSavingThis ? "..." : "💾 Save"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
       </div>
 
       {/* Loading Overlay */}
       {isPageLoading && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(255, 255, 255, 0.7)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999,
-          }}
-        >
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(255, 255, 255, 0.7)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999 }}>
           <div style={{ fontSize: "16px", fontWeight: "bold" }}>Loading...</div>
         </div>
       )}

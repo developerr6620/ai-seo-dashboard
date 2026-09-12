@@ -6,8 +6,137 @@ export const action = async ({ request }) => {
 
   try {
     const data = await request.json();
+    const resourceType = data.resourceType || (data.collectionId ? "collection" : data.fileId || data.files ? "file" : "product");
 
-    // Helper to run productUpdateMedia mutation
+    // ==========================================
+    // 1. STORE FILES (Content -> Files)
+    // ==========================================
+    if (resourceType === "file") {
+      let filesToUpdate = [];
+      if (Array.isArray(data.files)) {
+        filesToUpdate = data.files.map((f) => ({
+          id: f.id,
+          alt: fitWords(f.alt || "", ALT_MAX),
+        }));
+      } else if (data.fileId) {
+        filesToUpdate = [{ id: data.fileId, alt: fitWords(data.altText || "", ALT_MAX) }];
+      }
+
+      if (filesToUpdate.length === 0) {
+        return Response.json({ success: false, error: "No files provided to update" }, { status: 400 });
+      }
+
+      const fileMutation = `#graphql
+        mutation updateFileAlt($files: [FileUpdateInput!]!) {
+          fileUpdate(files: $files) {
+            files {
+              id
+              alt
+            }
+            userErrors {
+              code
+              field
+              message
+            }
+          }
+        }
+      `;
+
+      const res = await admin.graphql(fileMutation, {
+        variables: { files: filesToUpdate },
+      });
+      const resJson = await res.json();
+      const userErrors = resJson?.data?.fileUpdate?.userErrors || [];
+
+      if (userErrors.length > 0) {
+        const errorMsg = userErrors.map((e) => e.message).join("; ");
+        return Response.json({ success: false, error: errorMsg }, { status: 422 });
+      }
+
+      const updated = resJson?.data?.fileUpdate?.files || [];
+      return Response.json({
+        success: true,
+        resourceType: "file",
+        updatedCount: updated.length,
+        files: updated,
+      });
+    }
+
+    // ==========================================
+    // 2. COLLECTION BANNERS
+    // ==========================================
+    if (resourceType === "collection") {
+      let collectionsToUpdate = [];
+      if (Array.isArray(data.items)) {
+        collectionsToUpdate = data.items;
+      } else if (data.collectionId) {
+        collectionsToUpdate = [{ id: data.collectionId, altText: data.altText, imageUrl: data.imageUrl }];
+      }
+
+      if (collectionsToUpdate.length === 0) {
+        return Response.json({ success: false, error: "No collections provided to update" }, { status: 400 });
+      }
+
+      const colMutation = `#graphql
+        mutation updateCollectionImageAlt($input: CollectionInput!) {
+          collectionUpdate(input: $input) {
+            collection {
+              id
+              image {
+                altText
+              }
+            }
+            userErrors {
+              code
+              field
+              message
+            }
+          }
+        }
+      `;
+
+      let updatedCount = 0;
+      const errors = [];
+
+      for (const col of collectionsToUpdate) {
+        const alt = fitWords(col.altText || col.alt || "", ALT_MAX);
+        const input = {
+          id: col.id,
+          image: {
+            altText: alt,
+          },
+        };
+        // Preserve image src if available
+        if (col.imageUrl || col.src) {
+          input.image.src = col.imageUrl || col.src;
+        }
+
+        try {
+          const res = await admin.graphql(colMutation, { variables: { input } });
+          const resJson = await res.json();
+          const userErrors = resJson?.data?.collectionUpdate?.userErrors || [];
+
+          if (userErrors.length > 0) {
+            errors.push({ id: col.id, error: userErrors.map((e) => e.message).join("; ") });
+          } else {
+            updatedCount++;
+          }
+        } catch (e) {
+          errors.push({ id: col.id, error: e.message });
+        }
+      }
+
+      return Response.json({
+        success: updatedCount > 0 || errors.length === 0,
+        resourceType: "collection",
+        updatedCount,
+        errors,
+      });
+    }
+
+    // ==========================================
+    // 3. PRODUCT IMAGES (Existing)
+    // ==========================================
     const updateProductMediaAlt = async (productId, mediaItems) => {
       if (!productId || !Array.isArray(mediaItems) || mediaItems.length === 0) {
         return { success: false, error: "Missing productId or media items" };
@@ -59,7 +188,7 @@ export const action = async ({ request }) => {
       return { success: true, updatedCount: updatedMedia.length, media: updatedMedia };
     };
 
-    // 1. Bulk request: { items: [ { productId, media: [ { id, alt } ] } ] }
+    // Bulk product request
     if (Array.isArray(data.items)) {
       let totalUpdatedImages = 0;
       let totalUpdatedProducts = 0;
@@ -87,13 +216,14 @@ export const action = async ({ request }) => {
 
       return Response.json({
         success: totalUpdatedProducts > 0 || errors.length === 0,
+        resourceType: "product",
         updatedProductsCount: totalUpdatedProducts,
         updatedImagesCount: totalUpdatedImages,
         errors,
       });
     }
 
-    // 2. Single product update: { productId, media: [ { id, alt } ] } OR { productId, mediaId, altText }
+    // Single product update
     const productId = data.productId;
     let mediaItems = [];
 
@@ -117,6 +247,7 @@ export const action = async ({ request }) => {
 
     return Response.json({
       success: true,
+      resourceType: "product",
       updatedCount: singleResult.updatedCount,
       media: singleResult.media,
     });

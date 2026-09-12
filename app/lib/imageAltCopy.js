@@ -4,6 +4,7 @@
  * - Recommended length: under 125 characters
  * - Descriptive, natural language avoiding spammy keyword stuffing
  * - Contextual image view awareness (front, detail, angle, lifestyle)
+ * - Support for Products, Store Files (Content -> Files), and Collection Banners
  */
 
 export const ALT_MAX = 125;
@@ -42,6 +43,47 @@ export function fitWords(text, max = ALT_MAX) {
     }
   }
   return acc.replace(/[,:;–—\-.]+$/g, "").trim();
+}
+
+/**
+ * Turns messy filenames (e.g. `hero-banner_summer-sale_v2_1200x800.jpg?v=123`)
+ * into clean, readable title-cased English descriptions (e.g. `Summer Sale Banner Hero`).
+ */
+export function cleanFilename(rawNameOrUrl) {
+  if (!rawNameOrUrl) return "Store Image";
+
+  // If a full URL is passed, extract the filename from path
+  let filename = String(rawNameOrUrl).split("?")[0].split("#")[0];
+  if (filename.includes("/")) {
+    filename = filename.substring(filename.lastIndexOf("/") + 1);
+  }
+
+  // Strip file extensions
+  filename = filename.replace(/\.(jpe?g|png|webp|gif|svg|avif|bmp|tiff)$/i, "");
+
+  // Strip dimension suffixes like _1200x800, _800x, _2048x2048
+  filename = filename.replace(/_\d+x\d*/gi, "");
+
+  // Strip version / draft / hash suffixes
+  filename = filename.replace(/[_-](v\d+|final|draft|edit|copy|thumb|compressed|master)$/gi, "");
+
+  // Strip common noisy prefixes
+  filename = filename.replace(/^(img|dsc|screenshot|photo|image|banner)[_-]?/gi, "");
+
+  // Replace underscores, hyphens, and dots with spaces
+  filename = filename.replace(/[_\-.]+/g, " ").trim();
+
+  // If empty after stripping, return fallback
+  if (!filename) return "Store Image";
+
+  // Title case each word
+  const titleCased = filename
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+
+  return titleCased || "Store Image";
 }
 
 /**
@@ -84,8 +126,56 @@ export const ALT_PRESETS = [
   },
 ];
 
+export const FILE_ALT_PRESETS = [
+  {
+    id: "file_balanced",
+    label: "Balanced (Recommended)",
+    description: "Cleaned filename with store name",
+    template: "{filename} - {store_name}",
+  },
+  {
+    id: "file_clean",
+    label: "Filename Only",
+    description: "Pure natural-English image title",
+    template: "{filename}",
+  },
+  {
+    id: "file_brand_first",
+    label: "Store First",
+    description: "Store name followed by descriptive file title",
+    template: "{store_name} | {filename}",
+  },
+  {
+    id: "file_banner",
+    label: "Banner & Promotion",
+    description: "Appends Banner to the image subject",
+    template: "{filename} Banner - {store_name}",
+  },
+];
+
+export const COLLECTION_ALT_PRESETS = [
+  {
+    id: "col_balanced",
+    label: "Balanced (Recommended)",
+    description: "Collection title with store name",
+    template: "{collection_title} Collection Banner - {store_name}",
+  },
+  {
+    id: "col_clean",
+    label: "Category Only",
+    description: "Collection name banner",
+    template: "{collection_title} Collection",
+  },
+  {
+    id: "col_action",
+    label: "Action / Shop Now",
+    description: "High-converting action phrase",
+    template: "Shop {collection_title} at {store_name}",
+  },
+];
+
 /**
- * Generate an optimized Image ALT text using either a template or smart heuristics
+ * Generate an optimized Image ALT text for products
  */
 export function generateImageAltText({
   productTitle = "",
@@ -99,22 +189,18 @@ export function generateImageAltText({
 } = {}) {
   const title = cleanText(productTitle) || "Product";
   const vendor = cleanText(brand) || cleanText(storeName) || "";
-  
-  // Extract primary keyword
+
   let kw = cleanText(keyword);
   if (!kw && Array.isArray(keywords) && keywords.length > 0) {
     const validKw = keywords.map(cleanText).filter(Boolean);
-    // Alternate keywords across multiple images if available
     kw = validKw[imageIndex % validKw.length] || validKw[0] || "";
   }
   if (!kw) {
-    // Fallback: use first 2-3 words of title as topical subject
     kw = title.split(" ").slice(0, 3).join(" ");
   }
 
   const view = getImageViewLabel(imageIndex, totalImages);
 
-  // If a template is provided, apply token replacements
   if (template && typeof template === "string") {
     let result = template
       .replace(/\{product_title\}/gi, title)
@@ -123,7 +209,6 @@ export function generateImageAltText({
       .replace(/\{store_name\}/gi, cleanText(storeName) || vendor)
       .replace(/\{view\}/gi, view ? `(${view})` : "");
 
-    // Clean up empty separators if tokens were missing
     result = result
       .replace(/\s*-\s*by\s*$/gi, "")
       .replace(/\s*by\s*$/gi, "")
@@ -136,7 +221,6 @@ export function generateImageAltText({
     return fitWords(result, ALT_MAX);
   }
 
-  // Smart heuristic generation if no specific template is supplied
   const parts = [];
   parts.push(title);
 
@@ -152,6 +236,66 @@ export function generateImageAltText({
     parts.push(`by ${vendor}`);
   }
 
-  const rawCandidate = parts.join(" ");
-  return fitWords(rawCandidate, ALT_MAX);
+  return fitWords(parts.join(" "), ALT_MAX);
+}
+
+/**
+ * Generate an optimized ALT text for Store Files (Content -> Files)
+ */
+export function generateStoreFileAltText({
+  filename = "",
+  url = "",
+  storeName = "",
+  template = "",
+} = {}) {
+  const name = cleanFilename(filename || url);
+  const store = cleanText(storeName) || "Store";
+
+  if (template && typeof template === "string") {
+    let result = template
+      .replace(/\{filename\}/gi, name)
+      .replace(/\{store_name\}/gi, store)
+      .replace(/\{brand\}/gi, store);
+
+    result = result
+      .replace(/\s*-\s*by\s*$/gi, "")
+      .replace(/\s*-\s*$/gi, "")
+      .replace(/\s*\|\s*$/gi, "")
+      .replace(/\s*-\s*-\s*/g, " - ")
+      .trim();
+
+    return fitWords(result, ALT_MAX);
+  }
+
+  return fitWords(`${name} - ${store}`, ALT_MAX);
+}
+
+/**
+ * Generate an optimized ALT text for Collection Banners
+ */
+export function generateCollectionAltText({
+  collectionTitle = "",
+  storeName = "",
+  template = "",
+} = {}) {
+  const title = cleanText(collectionTitle) || "Collection";
+  const store = cleanText(storeName) || "Store";
+
+  if (template && typeof template === "string") {
+    let result = template
+      .replace(/\{collection_title\}/gi, title)
+      .replace(/\{store_name\}/gi, store)
+      .replace(/\{brand\}/gi, store);
+
+    result = result
+      .replace(/\s*-\s*by\s*$/gi, "")
+      .replace(/\s*-\s*$/gi, "")
+      .replace(/\s*\|\s*$/gi, "")
+      .replace(/\s*-\s*-\s*/g, " - ")
+      .trim();
+
+    return fitWords(result, ALT_MAX);
+  }
+
+  return fitWords(`${title} Collection Banner - ${store}`, ALT_MAX);
 }

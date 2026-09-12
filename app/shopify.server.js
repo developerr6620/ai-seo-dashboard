@@ -21,6 +21,7 @@ const shopify = shopifyApp({
     "write_products",
     "write_metaobjects",
     "write_metaobject_definitions",
+    "write_files",
   ],
   appUrl: defaultAppUrl,
   authPathPrefix: "/auth",
