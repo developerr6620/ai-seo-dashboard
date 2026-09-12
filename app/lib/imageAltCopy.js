@@ -128,28 +128,10 @@ export const ALT_PRESETS = [
 
 export const FILE_ALT_PRESETS = [
   {
-    id: "file_balanced",
-    label: "Balanced (Recommended)",
-    description: "Cleaned filename with store name",
-    template: "{filename} - {store_name}",
-  },
-  {
     id: "file_clean",
     label: "Filename Only",
-    description: "Pure natural-English image title",
+    description: "Pure natural-English image title extracted from file",
     template: "{filename}",
-  },
-  {
-    id: "file_brand_first",
-    label: "Store First",
-    description: "Store name followed by descriptive file title",
-    template: "{store_name} | {filename}",
-  },
-  {
-    id: "file_banner",
-    label: "Banner & Promotion",
-    description: "Appends Banner to the image subject",
-    template: "{filename} Banner - {store_name}",
   },
 ];
 
@@ -267,7 +249,7 @@ export function generateStoreFileAltText({
     return fitWords(result, ALT_MAX);
   }
 
-  return fitWords(`${name} - ${store}`, ALT_MAX);
+  return fitWords(name, ALT_MAX);
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   FILE_ALT_PRESETS,
   COLLECTION_ALT_PRESETS,
   isAltOk,
+  fitWords,
   cleanFilename,
   generateImageAltText,
   generateStoreFileAltText,
@@ -281,6 +282,16 @@ export default function ImageAltOptimizer() {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [feedback, setFeedback] = useState(null);
 
+  // Selection and Bulk Edit States (Store Files)
+  const [selectedFileIds, setSelectedFileIds] = useState([]);
+  const [fileViewMode, setFileViewMode] = useState("table"); // "table" | "cards"
+  const [showFindReplaceModal, setShowFindReplaceModal] = useState(false);
+  const [findText, setFindText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [showPrefixSuffixModal, setShowPrefixSuffixModal] = useState(false);
+  const [prefixText, setPrefixText] = useState("");
+  const [suffixText, setSuffixText] = useState("");
+
   // Value Getters
   const getProductAlt = useCallback((mediaId, orig) => (draftProductAlts[mediaId] !== undefined ? draftProductAlts[mediaId] : orig || ""), [draftProductAlts]);
   const getFileAlt = useCallback((fileId, orig) => (draftFileAlts[fileId] !== undefined ? draftFileAlts[fileId] : orig || ""), [draftFileAlts]);
@@ -482,6 +493,172 @@ export default function ImageAltOptimizer() {
       message: `✨ Generated ${count} ALT texts! Review them below and click 'Save Changes' to apply to Shopify.`,
     });
     if (shopify?.toast) shopify.toast.show(`✨ Generated ${count} ALT texts!`);
+  };
+
+  // ==========================================
+  // BULK ACTIONS HANDLERS (STORE FILES)
+  // ==========================================
+  // 1-Click: Auto-fill clean filename & batch-save ALL missing store files directly to Shopify
+  const handleAutoFillAndSaveAllMissing = async () => {
+    const missingFiles = files.filter((f) => !getFileAlt(f.id, f.alt).trim());
+    if (missingFiles.length === 0) {
+      if (shopify?.toast) shopify.toast.show("No missing ALT tags to optimize!");
+      return;
+    }
+
+    setIsBatchSaving(true);
+    setFeedback(null);
+    setBatchProgress({ current: 0, total: missingFiles.length });
+
+    // Generate clean filename ALT text for each missing file
+    const generatedItems = missingFiles.map((f) => ({
+      id: f.id,
+      alt: generateStoreFileAltText({
+        filename: f.filename,
+        url: f.url,
+        storeName: shop.name,
+        template: fileTemplate,
+      }),
+    }));
+
+    // Update drafts immediately so user sees them in UI
+    const draftsUpdate = {};
+    generatedItems.forEach((item) => {
+      draftsUpdate[item.id] = item.alt;
+    });
+    setDraftFileAlts((prev) => ({ ...prev, ...draftsUpdate }));
+
+    // Batch save to Shopify in chunks of 10
+    const CHUNK = 10;
+    let savedCount = 0;
+    for (let i = 0; i < generatedItems.length; i += CHUNK) {
+      const chunk = generatedItems.slice(i, i + CHUNK);
+      try {
+        const res = await fetch("/api/save-image-alt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resourceType: "file", files: chunk }),
+        });
+        const d = await res.json();
+        if (d.success) {
+          savedCount += d.updatedCount || chunk.length;
+          setFiles((prev) =>
+            prev.map((f) => {
+              const match = chunk.find((item) => item.id === f.id);
+              return match ? { ...f, alt: match.alt } : f;
+            })
+          );
+        }
+      } catch (e) {
+        console.error("1-Click Bulk Save error:", e);
+      }
+      setBatchProgress({ current: Math.min(i + CHUNK, generatedItems.length), total: generatedItems.length });
+    }
+
+    setIsBatchSaving(false);
+    setFeedback({
+      type: "success",
+      message: `🎉 Successfully generated & saved ${savedCount} ALT tags directly to Shopify Content → Files!`,
+    });
+    if (shopify?.toast) shopify.toast.show(`🎉 Saved ${savedCount} Store File ALT tags!`);
+  };
+
+  // Apply clean filename to selected files
+  const handleApplyFilenameToSelected = () => {
+    if (selectedFileIds.length === 0) return;
+    const drafts = {};
+    selectedFileIds.forEach((id) => {
+      const f = files.find((file) => file.id === id);
+      if (f) {
+        drafts[id] = generateStoreFileAltText({
+          filename: f.filename,
+          url: f.url,
+          storeName: shop.name,
+          template: fileTemplate,
+        });
+      }
+    });
+    setDraftFileAlts((prev) => ({ ...prev, ...drafts }));
+    if (shopify?.toast) shopify.toast.show(`✨ Applied clean filenames to ${selectedFileIds.length} images!`);
+  };
+
+  // Save selected files to Shopify
+  const handleSaveSelectedFiles = async () => {
+    if (selectedFileIds.length === 0) return;
+
+    const filesToSave = selectedFileIds.map((id) => {
+      const orig = files.find((f) => f.id === id);
+      const alt = getFileAlt(id, orig?.alt || "");
+      return { id, alt };
+    });
+
+    setIsBatchSaving(true);
+    setFeedback(null);
+    setBatchProgress({ current: 0, total: filesToSave.length });
+
+    const CHUNK = 10;
+    let savedCount = 0;
+    for (let i = 0; i < filesToSave.length; i += CHUNK) {
+      const chunk = filesToSave.slice(i, i + CHUNK);
+      try {
+        const res = await fetch("/api/save-image-alt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resourceType: "file", files: chunk }),
+        });
+        const d = await res.json();
+        if (d.success) {
+          savedCount += d.updatedCount || chunk.length;
+          setFiles((prev) =>
+            prev.map((f) => {
+              const match = chunk.find((item) => item.id === f.id);
+              return match ? { ...f, alt: match.alt } : f;
+            })
+          );
+        }
+      } catch (e) {
+        console.error("Save selected error:", e);
+      }
+      setBatchProgress({ current: Math.min(i + CHUNK, filesToSave.length), total: filesToSave.length });
+    }
+
+    setIsBatchSaving(false);
+    setSelectedFileIds([]);
+    setFeedback({
+      type: "success",
+      message: `🎉 Successfully saved ${savedCount} selected Store File ALT tags to Shopify!`,
+    });
+    if (shopify?.toast) shopify.toast.show(`🎉 Saved ${savedCount} selected files!`);
+  };
+
+  // Find and replace text across selected files
+  const handleApplyFindReplace = (findStr, replaceStr) => {
+    if (!findStr || selectedFileIds.length === 0) return;
+    const drafts = {};
+    selectedFileIds.forEach((id) => {
+      const orig = files.find((f) => f.id === id);
+      const cur = getFileAlt(id, orig?.alt || "");
+      const updated = cur.split(findStr).join(replaceStr);
+      drafts[id] = fitWords(updated, ALT_MAX);
+    });
+    setDraftFileAlts((prev) => ({ ...prev, ...drafts }));
+    setShowFindReplaceModal(false);
+    if (shopify?.toast) shopify.toast.show(`Replaced "${findStr}" in ${selectedFileIds.length} images!`);
+  };
+
+  // Add prefix / suffix across selected files
+  const handleApplyPrefixSuffix = (pfx, sfx) => {
+    if (selectedFileIds.length === 0) return;
+    const drafts = {};
+    selectedFileIds.forEach((id) => {
+      const orig = files.find((f) => f.id === id);
+      const cur = getFileAlt(id, orig?.alt || "");
+      const updated = `${pfx || ""}${cur}${sfx || ""}`.trim();
+      drafts[id] = fitWords(updated, ALT_MAX);
+    });
+    setDraftFileAlts((prev) => ({ ...prev, ...drafts }));
+    setShowPrefixSuffixModal(false);
+    if (shopify?.toast) shopify.toast.show(`Updated ${selectedFileIds.length} images with prefix/suffix!`);
   };
 
   // ==========================================
@@ -947,7 +1124,31 @@ export default function ImageAltOptimizer() {
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              {activeTab === "files" && stats.missing > 0 && (
+                <button
+                  type="button"
+                  disabled={isBatchSaving}
+                  onClick={handleAutoFillAndSaveAllMissing}
+                  style={{
+                    background: isBatchSaving ? "#94a3b8" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "8px 18px",
+                    fontSize: "13px",
+                    fontWeight: "800",
+                    cursor: isBatchSaving ? "wait" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    boxShadow: "0 4px 12px rgba(99, 102, 241, 0.35)",
+                  }}
+                >
+                  <span>🚀</span> 1-Click Auto-Fill & Save All Missing ({stats.missing})
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleAutoGenerateMissing}
@@ -995,8 +1196,10 @@ export default function ImageAltOptimizer() {
 
           {/* Presets */}
           <div style={{ marginTop: "16px" }}>
-            <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px" }}>Presets:</div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px" }}>
+              {activeTab === "files" ? "Store File Preset:" : "Presets:"}
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
               {(activeTab === "products" ? ALT_PRESETS : activeTab === "files" ? FILE_ALT_PRESETS : COLLECTION_ALT_PRESETS).map((p) => {
                 const currentTpl = activeTab === "products" ? productTemplate : activeTab === "files" ? fileTemplate : collectionTemplate;
                 const isAct = currentTpl === p.template;
@@ -1024,6 +1227,12 @@ export default function ImageAltOptimizer() {
                   </button>
                 );
               })}
+
+              {activeTab === "files" && (
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                  Extracts clean, readable title-cased names from raw filenames (removes dimensions, file extensions & hashes).
+                </span>
+              )}
             </div>
           </div>
 
@@ -1279,7 +1488,277 @@ export default function ImageAltOptimizer() {
 
         {/* TAB CONTENT: STORE FILES (CONTENT -> FILES) */}
         {activeTab === "files" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* BULK TOOLBAR & VIEW MODE CONTROLS */}
+            <div
+              style={{
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                padding: "12px 18px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "12px",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+              }}
+            >
+              {/* Multi-Selection Controls */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: "700", color: "#334155", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={filteredFiles.length > 0 && filteredFiles.every((f) => selectedFileIds.includes(f.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const allIds = Array.from(new Set([...selectedFileIds, ...filteredFiles.map((f) => f.id)]));
+                        setSelectedFileIds(allIds);
+                      } else {
+                        const filteredIds = new Set(filteredFiles.map((f) => f.id));
+                        setSelectedFileIds(selectedFileIds.filter((id) => !filteredIds.has(id)));
+                      }
+                    }}
+                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                  />
+                  <span>Select All Filtered</span>
+                </label>
+
+                <div style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = filteredFiles.map((f) => f.id);
+                      setSelectedFileIds(allIds);
+                    }}
+                    style={{
+                      background: "#f1f5f9",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "6px",
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      color: "#334155",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Select All ({filteredFiles.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const missingIds = filteredFiles.filter((f) => !getFileAlt(f.id, f.alt).trim()).map((f) => f.id);
+                      setSelectedFileIds(missingIds);
+                    }}
+                    style={{
+                      background: "#fff7ed",
+                      border: "1px solid #fed7aa",
+                      borderRadius: "6px",
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      color: "#c2410c",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Select Missing ({filteredFiles.filter((f) => !getFileAlt(f.id, f.alt).trim()).length})
+                  </button>
+
+                  {selectedFileIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFileIds([])}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        fontSize: "12px",
+                        color: "#64748b",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      Deselect All ({selectedFileIds.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* View Mode Switcher */}
+              <div style={{ display: "inline-flex", background: "#f1f5f9", padding: "3px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <button
+                  type="button"
+                  onClick={() => setFileViewMode("table")}
+                  style={{
+                    background: fileViewMode === "table" ? "#ffffff" : "transparent",
+                    color: fileViewMode === "table" ? "#0f172a" : "#64748b",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 14px",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    boxShadow: fileViewMode === "table" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span>📑</span> Compact Table ({filteredFiles.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFileViewMode("cards")}
+                  style={{
+                    background: fileViewMode === "cards" ? "#ffffff" : "transparent",
+                    color: fileViewMode === "cards" ? "#0f172a" : "#64748b",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 14px",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    boxShadow: fileViewMode === "cards" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span>🎴</span> Card View
+                </button>
+              </div>
+            </div>
+
+            {/* STICKY BULK ACTIONS BAR (When items are selected) */}
+            {selectedFileIds.length > 0 && (
+              <div
+                style={{
+                  position: "sticky",
+                  top: "16px",
+                  zIndex: 80,
+                  background: "#0f172a",
+                  color: "#ffffff",
+                  padding: "12px 20px",
+                  borderRadius: "10px",
+                  boxShadow: "0 12px 28px -4px rgba(15, 23, 42, 0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "14px",
+                  flexWrap: "wrap",
+                  border: "1px solid #334155",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ background: "#2563eb", color: "#ffffff", padding: "3px 12px", borderRadius: "999px", fontSize: "12px", fontWeight: "800" }}>
+                    {selectedFileIds.length} Selected
+                  </span>
+                  <span style={{ fontSize: "13px", color: "#cbd5e1" }}>
+                    Bulk actions for selected images:
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={handleApplyFilenameToSelected}
+                    style={{
+                      background: "#1e293b",
+                      color: "#f8fafc",
+                      border: "1px solid #475569",
+                      borderRadius: "6px",
+                      padding: "7px 14px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span>✨</span> Auto-Fill Clean Filenames
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowFindReplaceModal(true)}
+                    style={{
+                      background: "#1e293b",
+                      color: "#f8fafc",
+                      border: "1px solid #475569",
+                      borderRadius: "6px",
+                      padding: "7px 14px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span>🔍</span> Find & Replace
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPrefixSuffixModal(true)}
+                    style={{
+                      background: "#1e293b",
+                      color: "#f8fafc",
+                      border: "1px solid #475569",
+                      borderRadius: "6px",
+                      padding: "7px 14px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span>🏷️</span> Add Prefix/Suffix
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isBatchSaving}
+                    onClick={handleSaveSelectedFiles}
+                    style={{
+                      background: isBatchSaving ? "#64748b" : "linear-gradient(135deg, #10b981, #059669)",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "7px 18px",
+                      fontSize: "12px",
+                      fontWeight: "800",
+                      cursor: isBatchSaving ? "wait" : "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span>💾</span> {isBatchSaving ? "Saving..." : `Save Selected (${selectedFileIds.length})`}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFileIds([])}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      padding: "0 6px",
+                    }}
+                  >
+                    ✕ Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {filteredFiles.length === 0 ? (
               <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
                 <div style={{ fontSize: "36px", marginBottom: "10px" }}>🖼️</div>
@@ -1288,7 +1767,171 @@ export default function ImageAltOptimizer() {
                   Upload hero banners, sliders, and logos in your Shopify Admin under <strong>Content &rarr; Files</strong> to optimize them here.
                 </p>
               </div>
+            ) : fileViewMode === "table" ? (
+              /* COMPACT SPREADSHEET TABLE VIEW */
+              <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", color: "#475569" }}>
+                        <th style={{ width: "40px", padding: "12px 14px", textAlign: "center" }}>
+                          <input
+                            type="checkbox"
+                            checked={filteredFiles.length > 0 && filteredFiles.every((f) => selectedFileIds.includes(f.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const allIds = Array.from(new Set([...selectedFileIds, ...filteredFiles.map((f) => f.id)]));
+                                setSelectedFileIds(allIds);
+                              } else {
+                                const filteredIds = new Set(filteredFiles.map((f) => f.id));
+                                setSelectedFileIds(selectedFileIds.filter((id) => !filteredIds.has(id)));
+                              }
+                            }}
+                            style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                          />
+                        </th>
+                        <th style={{ width: "60px", padding: "12px 10px" }}>Image</th>
+                        <th style={{ width: "240px", padding: "12px 14px", fontWeight: "700" }}>Filename & Dimensions</th>
+                        <th style={{ padding: "12px 14px", fontWeight: "700" }}>ALT Text Description</th>
+                        <th style={{ width: "120px", padding: "12px 14px", fontWeight: "700", textAlign: "center" }}>Status</th>
+                        <th style={{ width: "160px", padding: "12px 14px", fontWeight: "700", textAlign: "right" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredFiles.map((f, idx) => {
+                        const currentAlt = getFileAlt(f.id, f.alt);
+                        const isMissing = !currentAlt.trim();
+                        const isDirty = (draftFileAlts[f.id] || "").trim() !== (f.alt || "").trim();
+                        const isSavingThis = savingId === f.id;
+                        const len = currentAlt.length;
+                        const isOpt = isAltOk(currentAlt);
+                        const isSelected = selectedFileIds.includes(f.id);
+
+                        return (
+                          <tr
+                            key={f.id}
+                            style={{
+                              borderBottom: "1px solid #f1f5f9",
+                              background: isSelected ? "#eff6ff" : isDirty ? "#f0fdf4" : idx % 2 === 0 ? "#ffffff" : "#fafafa",
+                              transition: "background 0.15s ease",
+                            }}
+                          >
+                            <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  setSelectedFileIds((prev) =>
+                                    prev.includes(f.id) ? prev.filter((id) => id !== f.id) : [...prev, f.id]
+                                  );
+                                }}
+                                style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                              />
+                            </td>
+                            <td style={{ padding: "8px 10px" }}>
+                              <div style={{ width: "48px", height: "48px", borderRadius: "6px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <img src={f.url} alt={currentAlt || f.filename} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              </div>
+                            </td>
+                            <td style={{ padding: "10px 14px" }}>
+                              <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "13px", wordBreak: "break-all" }}>
+                                {f.filename}
+                              </div>
+                              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                                {f.width && f.height ? `${f.width}×${f.height}px` : "Store File"}
+                              </div>
+                            </td>
+                            <td style={{ padding: "10px 14px" }}>
+                              <input
+                                type="text"
+                                value={currentAlt}
+                                onChange={(e) => setDraftFileAlts((prev) => ({ ...prev, [f.id]: e.target.value }))}
+                                placeholder="Enter descriptive ALT text..."
+                                style={{
+                                  width: "100%",
+                                  padding: "8px 12px",
+                                  fontSize: "13px",
+                                  borderRadius: "6px",
+                                  border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`,
+                                  background: "#ffffff",
+                                  boxSizing: "border-box",
+                                  outline: "none",
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: "700",
+                                  padding: "3px 8px",
+                                  borderRadius: "999px",
+                                  display: "inline-block",
+                                  background: isMissing ? "#fee2e2" : isOpt ? "#dcfce7" : "#fef3c7",
+                                  color: isMissing ? "#991b1b" : isOpt ? "#166534" : "#92400e",
+                                }}
+                              >
+                                {isMissing ? "⚠️ Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
+                              </span>
+                            </td>
+                            <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                              <div style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const gen = generateStoreFileAltText({
+                                      filename: f.filename,
+                                      url: f.url,
+                                      storeName: shop.name,
+                                      template: fileTemplate,
+                                    });
+                                    setDraftFileAlts((prev) => ({ ...prev, [f.id]: gen }));
+                                  }}
+                                  title="Fill with Clean Filename"
+                                  style={{
+                                    background: "#ffffff",
+                                    border: "1px solid #cbd5e1",
+                                    borderRadius: "5px",
+                                    padding: "5px 9px",
+                                    fontSize: "11px",
+                                    fontWeight: "700",
+                                    color: "#2563eb",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  ✨ Filename
+                                </button>
+
+                                {isDirty && (
+                                  <button
+                                    type="button"
+                                    disabled={isSavingThis}
+                                    onClick={() => handleSaveFile(f.id)}
+                                    style={{
+                                      background: isSavingThis ? "#94a3b8" : "#16a34a",
+                                      color: "#ffffff",
+                                      border: "none",
+                                      borderRadius: "5px",
+                                      padding: "5px 12px",
+                                      fontSize: "11px",
+                                      fontWeight: "700",
+                                      cursor: isSavingThis ? "wait" : "pointer",
+                                    }}
+                                  >
+                                    {isSavingThis ? "..." : "💾 Save"}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             ) : (
+              /* CARD VIEW */
               filteredFiles.map((f) => {
                 const currentAlt = getFileAlt(f.id, f.alt);
                 const isMissing = !currentAlt.trim();
@@ -1296,9 +1939,33 @@ export default function ImageAltOptimizer() {
                 const isSavingThis = savingId === f.id;
                 const len = currentAlt.length;
                 const isOpt = isAltOk(currentAlt);
+                const isSelected = selectedFileIds.includes(f.id);
 
                 return (
-                  <div key={f.id} style={{ background: "#ffffff", border: `1.5px solid ${isMissing ? "#fed7aa" : isDirty ? "#86efac" : "#e2e8f0"}`, borderRadius: "10px", padding: "16px 18px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                  <div
+                    key={f.id}
+                    style={{
+                      background: isSelected ? "#eff6ff" : "#ffffff",
+                      border: `1.5px solid ${isSelected ? "#3b82f6" : isMissing ? "#fed7aa" : isDirty ? "#86efac" : "#e2e8f0"}`,
+                      borderRadius: "10px",
+                      padding: "16px 18px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "16px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        setSelectedFileIds((prev) =>
+                          prev.includes(f.id) ? prev.filter((id) => id !== f.id) : [...prev, f.id]
+                        );
+                      }}
+                      style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                    />
+
                     <div style={{ width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#f8fafc", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <img src={f.url} alt={currentAlt || f.filename} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     </div>
@@ -1335,7 +2002,7 @@ export default function ImageAltOptimizer() {
                         }}
                         style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
                       >
-                        ✨ AI Suggest
+                        ✨ Filename
                       </button>
 
                       {isDirty && (
@@ -1435,6 +2102,112 @@ export default function ImageAltOptimizer() {
           </div>
         )}
       </div>
+
+      {/* FIND & REPLACE MODAL */}
+      {showFindReplaceModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
+          <div style={{ background: "#ffffff", borderRadius: "12px", padding: "24px", maxWidth: "460px", width: "100%", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>🔍 Find & Replace in Selected ({selectedFileIds.length})</h3>
+              <button type="button" onClick={() => setShowFindReplaceModal(false)} style={{ background: "transparent", border: "none", fontSize: "16px", cursor: "pointer", color: "#64748b" }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: "14px" }}>
+              <label htmlFor="find-text-input" style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "4px" }}>Find Text:</label>
+              <input
+                id="find-text-input"
+                type="text"
+                value={findText}
+                onChange={(e) => setFindText(e.target.value)}
+                placeholder="e.g. 'banner' or '-'"
+                style={{ width: "100%", padding: "8px 12px", fontSize: "13px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label htmlFor="replace-text-input" style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "4px" }}>Replace With:</label>
+              <input
+                id="replace-text-input"
+                type="text"
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                placeholder="e.g. 'Store Banner' or ' '"
+                style={{ width: "100%", padding: "8px 12px", fontSize: "13px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setShowFindReplaceModal(false)}
+                style={{ background: "#f1f5f9", color: "#475569", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyFindReplace(findText, replaceText)}
+                style={{ background: "#2563eb", color: "#ffffff", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+              >
+                Apply Replacement
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PREFIX / SUFFIX MODAL */}
+      {showPrefixSuffixModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
+          <div style={{ background: "#ffffff", borderRadius: "12px", padding: "24px", maxWidth: "460px", width: "100%", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>🏷️ Add Prefix or Suffix ({selectedFileIds.length})</h3>
+              <button type="button" onClick={() => setShowPrefixSuffixModal(false)} style={{ background: "transparent", border: "none", fontSize: "16px", cursor: "pointer", color: "#64748b" }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: "14px" }}>
+              <label htmlFor="prefix-text-input" style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "4px" }}>Prefix (Add before ALT text):</label>
+              <input
+                id="prefix-text-input"
+                type="text"
+                value={prefixText}
+                onChange={(e) => setPrefixText(e.target.value)}
+                placeholder="e.g. 'Store Banner - '"
+                style={{ width: "100%", padding: "8px 12px", fontSize: "13px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label htmlFor="suffix-text-input" style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "4px" }}>Suffix (Add after ALT text):</label>
+              <input
+                id="suffix-text-input"
+                type="text"
+                value={suffixText}
+                onChange={(e) => setSuffixText(e.target.value)}
+                placeholder={`e.g. ' | ${shop.name}'`}
+                style={{ width: "100%", padding: "8px 12px", fontSize: "13px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setShowPrefixSuffixModal(false)}
+                style={{ background: "#f1f5f9", color: "#475569", border: "none", borderRadius: "6px", padding: "8px 14px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPrefixSuffix(prefixText, suffixText)}
+                style={{ background: "#2563eb", color: "#ffffff", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+              >
+                Apply to Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loading Overlay */}
       {isPageLoading && (
