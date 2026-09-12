@@ -119,7 +119,7 @@ export const loader = async ({ request }) => {
         keywords: parseKeywords(p.keywordsMetafield?.value),
         media: mediaNodes,
       };
-    });
+    }).filter((p) => p.media.length > 0);
   } catch (err) {
     console.error("[ImageAltOptimizer] Product fetch error:", err);
   }
@@ -306,6 +306,7 @@ export default function ImageAltOptimizer() {
   // Selection and Bulk Edit States (Store Files)
   const [selectedFileIds, setSelectedFileIds] = useState([]);
   const [fileViewMode, setFileViewMode] = useState("table"); // "table" | "cards"
+  const [productViewMode, setProductViewMode] = useState("table"); // "table" | "cards"
   const [showFindReplaceModal, setShowFindReplaceModal] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
@@ -1218,7 +1219,7 @@ export default function ImageAltOptimizer() {
           {/* Presets */}
           <div style={{ marginTop: "16px" }}>
             <div style={{ fontSize: "12px", fontWeight: "700", color: "#475569", marginBottom: "8px" }}>
-              {activeTab === "files" ? "Store File Preset:" : "Presets:"}
+              {activeTab === "products" ? "Product Preset:" : activeTab === "files" ? "Store File Preset:" : "Category Preset:"}
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
               {(activeTab === "products" ? ALT_PRESETS : activeTab === "files" ? FILE_ALT_PRESETS : COLLECTION_ALT_PRESETS).map((p) => {
@@ -1249,9 +1250,19 @@ export default function ImageAltOptimizer() {
                 );
               })}
 
+              {activeTab === "products" && (
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                  Combines product title, image angle/view (Front, Angle, Detail), and target keyword.
+                </span>
+              )}
               {activeTab === "files" && (
                 <span style={{ fontSize: "12px", color: "#64748b" }}>
                   Extracts clean, readable title-cased names from raw filenames (removes dimensions, file extensions & hashes).
+                </span>
+              )}
+              {activeTab === "collections" && (
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                  Category collection name banner.
                 </span>
               )}
             </div>
@@ -1383,22 +1394,250 @@ export default function ImageAltOptimizer() {
 
         {/* TAB CONTENT: PRODUCTS */}
         {activeTab === "products" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* View Mode & Helper Toolbar */}
+            <div
+              style={{
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                padding: "10px 16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+              }}
+            >
+              <div style={{ fontSize: "13px", color: "#475569" }}>
+                Showing <strong>{filteredProducts.length}</strong> products with images ({filteredProducts.reduce((acc, p) => acc + (filterMode === "missing" ? p.media.filter(m => !getProductAlt(m.id, m.alt).trim()).length : p.media.length), 0)} images)
+              </div>
+
+              {/* View Mode Switcher */}
+              <div style={{ display: "inline-flex", background: "#f1f5f9", padding: "3px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <button
+                  type="button"
+                  onClick={() => setProductViewMode("table")}
+                  style={{
+                    background: productViewMode === "table" ? "#ffffff" : "transparent",
+                    color: productViewMode === "table" ? "#0f172a" : "#64748b",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "5px 12px",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    boxShadow: productViewMode === "table" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span>📑</span> Compact Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductViewMode("cards")}
+                  style={{
+                    background: productViewMode === "cards" ? "#ffffff" : "transparent",
+                    color: productViewMode === "cards" ? "#0f172a" : "#64748b",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "5px 12px",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    boxShadow: productViewMode === "cards" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span>🎴</span> Card View
+                </button>
+              </div>
+            </div>
+
             {filteredProducts.length === 0 ? (
-              <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "36px", marginBottom: "10px" }}>📦</div>
-                <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>No product images found matching criteria.</div>
+              <div style={{ background: "#ffffff", padding: "50px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "32px", marginBottom: "8px" }}>📦</div>
+                <div style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>No product images found matching criteria.</div>
+              </div>
+            ) : productViewMode === "table" ? (
+              /* COMPACT SPREADSHEET TABLE VIEW FOR PRODUCTS */
+              <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", color: "#475569" }}>
+                        <th style={{ width: "55px", padding: "10px 12px" }}>Image</th>
+                        <th style={{ width: "220px", padding: "10px 12px", fontWeight: "700" }}>Product & View</th>
+                        <th style={{ width: "130px", padding: "10px 12px", fontWeight: "700" }}>Keyword</th>
+                        <th style={{ padding: "10px 12px", fontWeight: "700" }}>ALT Text Description</th>
+                        <th style={{ width: "110px", padding: "10px 12px", fontWeight: "700", textAlign: "center" }}>Status</th>
+                        <th style={{ width: "130px", padding: "10px 12px", fontWeight: "700", textAlign: "right" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProducts.flatMap((p) => {
+                        const mediaToShow = filterMode === "missing"
+                          ? p.media.filter((m) => !getProductAlt(m.id, m.alt).trim())
+                          : p.media;
+
+                        return mediaToShow.map((m, idx) => {
+                          const currentAlt = getProductAlt(m.id, m.alt);
+                          const isMissing = !currentAlt.trim();
+                          const isDirty = (draftProductAlts[m.id] || "").trim() !== (m.alt || "").trim();
+                          const isSavingThis = savingId === m.id;
+                          const len = currentAlt.length;
+                          const isOpt = isAltOk(currentAlt);
+                          const viewLabel = getImageViewLabel(idx, p.media.length);
+                          const kw = p.keywords?.[idx % (p.keywords.length || 1)] || p.keywords?.[0] || "";
+
+                          return (
+                            <tr
+                              key={m.id}
+                              style={{
+                                borderBottom: "1px solid #f1f5f9",
+                                background: isDirty ? "#f0fdf4" : idx % 2 === 0 ? "#ffffff" : "#fafafa",
+                                transition: "background 0.15s ease",
+                              }}
+                            >
+                              <td style={{ padding: "8px 12px" }}>
+                                <div style={{ width: "42px", height: "42px", borderRadius: "6px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#f1f5f9" }}>
+                                  <img src={m.url} alt={currentAlt || p.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                </div>
+                              </td>
+                              <td style={{ padding: "8px 12px" }}>
+                                <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "13px" }}>
+                                  {p.title}
+                                </div>
+                                <div style={{ fontSize: "11px", color: "#64748b", marginTop: "1px" }}>
+                                  #{idx + 1} {viewLabel ? `• ${viewLabel}` : "• Main View"}
+                                </div>
+                              </td>
+                              <td style={{ padding: "8px 12px" }}>
+                                {kw ? (
+                                  <span style={{ fontSize: "11px", fontWeight: "600", padding: "2px 8px", borderRadius: "4px", background: "#eff6ff", color: "#1d4ed8" }}>
+                                    {kw}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: "8px 12px" }}>
+                                <input
+                                  type="text"
+                                  value={currentAlt}
+                                  onChange={(e) => setDraftProductAlts((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                                  placeholder="Enter image alt text..."
+                                  style={{
+                                    width: "100%",
+                                    padding: "7px 10px",
+                                    fontSize: "12px",
+                                    borderRadius: "6px",
+                                    border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`,
+                                    background: "#ffffff",
+                                    boxSizing: "border-box",
+                                    outline: "none",
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    fontWeight: "700",
+                                    padding: "3px 8px",
+                                    borderRadius: "999px",
+                                    display: "inline-block",
+                                    background: isMissing ? "#fee2e2" : isOpt ? "#dcfce7" : "#fef3c7",
+                                    color: isMissing ? "#991b1b" : isOpt ? "#166534" : "#92400e",
+                                  }}
+                                >
+                                  {isMissing ? "⚠️ Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
+                                </span>
+                              </td>
+                              <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                                <div style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const gen = generateImageAltText({
+                                        productTitle: p.title,
+                                        keyword: kw,
+                                        keywords: p.keywords,
+                                        brand: p.vendor,
+                                        storeName: shop.name,
+                                        imageIndex: idx,
+                                        totalImages: p.media.length,
+                                        template: productTemplate,
+                                      });
+                                      setDraftProductAlts((prev) => ({ ...prev, [m.id]: gen }));
+                                    }}
+                                    title="Generate with Descriptive Preset"
+                                    style={{
+                                      background: "#ffffff",
+                                      border: "1px solid #cbd5e1",
+                                      borderRadius: "5px",
+                                      padding: "5px 8px",
+                                      fontSize: "11px",
+                                      fontWeight: "700",
+                                      color: "#2563eb",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    ✨ AI
+                                  </button>
+
+                                  {isDirty && (
+                                    <button
+                                      type="button"
+                                      disabled={isSavingThis}
+                                      onClick={() => handleSaveProductMedia(p.id, m.id)}
+                                      style={{
+                                        background: isSavingThis ? "#94a3b8" : "#16a34a",
+                                        color: "#ffffff",
+                                        border: "none",
+                                        borderRadius: "5px",
+                                        padding: "5px 10px",
+                                        fontSize: "11px",
+                                        fontWeight: "700",
+                                        cursor: isSavingThis ? "wait" : "pointer",
+                                      }}
+                                    >
+                                      {isSavingThis ? "..." : "💾 Save"}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
+              /* COMPACT CARD VIEW FOR PRODUCTS */
               filteredProducts.map((p) => {
+                const mediaToShow = filterMode === "missing"
+                  ? p.media.filter((m) => !getProductAlt(m.id, m.alt).trim())
+                  : p.media;
+
+                if (mediaToShow.length === 0) return null;
+
                 const missingCount = p.media.filter((m) => !getProductAlt(m.id, m.alt).trim()).length;
+
                 return (
-                  <div key={p.id} style={{ background: "#ffffff", border: `1.5px solid ${missingCount > 0 ? "#fed7aa" : "#e2e8f0"}`, borderRadius: "12px", padding: "20px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f5f9", paddingBottom: "12px", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                  <div key={p.id} style={{ background: "#ffffff", border: `1.5px solid ${missingCount > 0 ? "#fed7aa" : "#e2e8f0"}`, borderRadius: "10px", padding: "14px 18px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f5f9", paddingBottom: "10px", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
                       <div>
-                        <span style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>{p.title}</span>
+                        <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>{p.title}</span>
                         <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: missingCount > 0 ? "#ffedd5" : "#dcfce7", color: missingCount > 0 ? "#9a3412" : "#166534" }}>
-                          {missingCount > 0 ? `⚠️ ${missingCount} of ${p.media.length} Missing ALT` : `✅ All ${p.media.length} Optimized`}
+                          {missingCount > 0 ? `⚠️ ${missingCount} Missing` : `✅ ${p.media.length} Optimized`}
                         </span>
                       </div>
 
@@ -1421,14 +1660,14 @@ export default function ImageAltOptimizer() {
                           setDraftProductAlts((prev) => ({ ...prev, ...drafts }));
                           if (shopify?.toast) shopify.toast.show(`Generated for ${p.title}`);
                         }}
-                        style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "5px 12px", fontSize: "12px", fontWeight: "700", cursor: "pointer" }}
+                        style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "4px 10px", fontSize: "11px", fontWeight: "700", cursor: "pointer" }}
                       >
                         ✨ Generate for Product
                       </button>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {p.media.map((m, idx) => {
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {mediaToShow.map((m, idx) => {
                         const currentAlt = getProductAlt(m.id, m.alt);
                         const isMissing = !currentAlt.trim();
                         const isDirty = (draftProductAlts[m.id] || "").trim() !== (m.alt || "").trim();
@@ -1438,31 +1677,29 @@ export default function ImageAltOptimizer() {
                         const viewLabel = getImageViewLabel(idx, p.media.length);
 
                         return (
-                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "10px 14px", borderRadius: "8px", background: isDirty ? "#f0fdf4" : "#f8fafc", border: `1px solid ${isDirty ? "#86efac" : "#e2e8f0"}`, flexWrap: "wrap" }}>
-                            <div style={{ width: "50px", height: "50px", borderRadius: "6px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#ffffff", flexShrink: 0 }}>
+                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 12px", borderRadius: "8px", background: isDirty ? "#f0fdf4" : "#f8fafc", border: `1px solid ${isDirty ? "#86efac" : "#e2e8f0"}`, flexWrap: "wrap" }}>
+                            <div style={{ width: "44px", height: "44px", borderRadius: "6px", overflow: "hidden", border: "1px solid #cbd5e1", background: "#ffffff", flexShrink: 0 }}>
                               <img src={m.url} alt={currentAlt || "Product"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             </div>
 
-                            <div style={{ minWidth: "90px" }}>
+                            <div style={{ minWidth: "80px" }}>
                               <div style={{ fontSize: "12px", fontWeight: "800", color: "#0f172a" }}>#{idx + 1}</div>
                               <div style={{ fontSize: "11px", color: "#64748b" }}>{viewLabel || "Main"}</div>
                             </div>
 
-                            <div style={{ flex: 1, minWidth: "240px" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                                <span style={{ fontSize: "11px", fontWeight: "600", color: "#475569" }}>ALT Text:</span>
-                                <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
-                                  {isMissing ? "⚠️ Empty" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
-                                </span>
-                              </div>
+                            <div style={{ flex: 1, minWidth: "220px" }}>
                               <input
                                 type="text"
                                 value={currentAlt}
                                 onChange={(e) => setDraftProductAlts((prev) => ({ ...prev, [m.id]: e.target.value }))}
                                 placeholder="Enter image alt text..."
-                                style={{ width: "100%", padding: "7px 10px", fontSize: "12px", borderRadius: "6px", border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`, background: "#ffffff", boxSizing: "border-box", outline: "none" }}
+                                style={{ width: "100%", padding: "6px 10px", fontSize: "12px", borderRadius: "6px", border: `1.5px solid ${isMissing ? "#fdba74" : isDirty ? "#86efac" : "#cbd5e1"}`, background: "#ffffff", boxSizing: "border-box", outline: "none" }}
                               />
                             </div>
+
+                            <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
+                              {isMissing ? "⚠️ Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
+                            </span>
 
                             <div style={{ display: "flex", gap: "6px" }}>
                               <button
@@ -1480,7 +1717,7 @@ export default function ImageAltOptimizer() {
                                   });
                                   setDraftProductAlts((prev) => ({ ...prev, [m.id]: gen }));
                                 }}
-                                style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
+                                style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "5px", padding: "5px 8px", fontSize: "11px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
                               >
                                 ✨ AI
                               </button>
@@ -1490,7 +1727,7 @@ export default function ImageAltOptimizer() {
                                   type="button"
                                   disabled={isSavingThis}
                                   onClick={() => handleSaveProductMedia(p.id, m.id)}
-                                  style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "11px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
+                                  style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "5px", padding: "5px 10px", fontSize: "11px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
                                 >
                                   {isSavingThis ? "..." : "💾 Save"}
                                 </button>

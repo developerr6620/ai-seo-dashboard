@@ -101,28 +101,10 @@ export function getImageViewLabel(index = 0, total = 1) {
 
 export const ALT_PRESETS = [
   {
-    id: "balanced",
-    label: "Balanced (Recommended)",
-    description: "Product title, primary keyword, and store/brand name",
-    template: "{product_title} - {keyword} by {brand}",
-  },
-  {
     id: "descriptive",
     label: "Descriptive & Contextual",
     description: "Product title with specific image view angle and keyword",
     template: "{product_title} {view} - {keyword}",
-  },
-  {
-    id: "clean",
-    label: "Clean & Direct",
-    description: "Product title and brand only (best for minimalist catalogs)",
-    template: "{product_title} | {brand}",
-  },
-  {
-    id: "keyword_focused",
-    label: "Search & Keyword Focus",
-    description: "Target keyword highlighted with product title",
-    template: "{keyword} - {product_title}",
   },
 ];
 
@@ -137,22 +119,10 @@ export const FILE_ALT_PRESETS = [
 
 export const COLLECTION_ALT_PRESETS = [
   {
-    id: "col_balanced",
-    label: "Balanced (Recommended)",
-    description: "Collection title with store name",
-    template: "{collection_title} Collection Banner - {store_name}",
-  },
-  {
     id: "col_clean",
     label: "Category Only",
     description: "Collection name banner",
     template: "{collection_title} Collection",
-  },
-  {
-    id: "col_action",
-    label: "Action / Shop Now",
-    description: "High-converting action phrase",
-    template: "Shop {collection_title} at {store_name}",
   },
 ];
 
@@ -279,5 +249,5 @@ export function generateCollectionAltText({
     return fitWords(result, ALT_MAX);
   }
 
-  return fitWords(`${title} Collection Banner - ${store}`, ALT_MAX);
+  return fitWords(`${title} Collection`, ALT_MAX);
 }
