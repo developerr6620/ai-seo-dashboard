@@ -550,8 +550,8 @@ export default function ImageAltOptimizer() {
     });
     setDraftFileAlts((prev) => ({ ...prev, ...draftsUpdate }));
 
-    // Batch save to Shopify in chunks of 10
-    const CHUNK = 10;
+    // Batch save to Shopify in chunks of 20
+    const CHUNK = 20;
     let savedCount = 0;
     for (let i = 0; i < generatedItems.length; i += CHUNK) {
       const chunk = generatedItems.slice(i, i + CHUNK);
@@ -847,7 +847,7 @@ export default function ImageAltOptimizer() {
 
       setBatchProgress({ current: 0, total: dirtyFiles.length });
       let saved = 0;
-      const CHUNK = 10;
+      const CHUNK = 20;
       for (let i = 0; i < dirtyFiles.length; i += CHUNK) {
         const chunk = dirtyFiles.slice(i, i + CHUNK);
         try {
@@ -1049,6 +1049,33 @@ export default function ImageAltOptimizer() {
             <span style={{ fontSize: "20px" }}>⚠️</span>
             <div>
               <strong>Shopify Files Scope Pending:</strong> If your files library does not show images, please reload the app in your Shopify Admin to accept the newly added <code>write_files</code> permission.
+            </div>
+          </div>
+        )}
+
+        {/* Helper Banner for Store Files & Homepage Assets */}
+        {activeTab === "files" && (
+          <div
+            style={{
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              borderRadius: "10px",
+              padding: "12px 16px",
+              marginBottom: "18px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "10px",
+              fontSize: "13px",
+              color: "#1e40af",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "18px" }}>💡</span>
+              <span>
+                <strong>Homepage & Theme Assets:</strong> Homepage banners, graphics, and comparison table icons (e.g. <code>Frame</code>, <code>complate</code>, <code>limited</code>, <code>none</code>) are located right here under Store Files. Use the <strong>⚠️ Missing ALT</strong> filter or the <strong>⚡ 1-Click: Auto-fill & Save</strong> button below to optimize them all at once!
+              </span>
             </div>
           </div>
         )}
