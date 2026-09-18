@@ -22,51 +22,57 @@ export const loader = async ({ request }) => {
       try {
         const { admin } = await unauthenticated.admin(offlineSession.shop);
         const pRes = await admin.graphql(`
-          query testPages {
-            pages(first: 5) {
+          query getPagesSeo {
+            pages(first: 10) {
               edges {
                 node {
                   id
                   title
                   handle
+                  bodySummary
+                  seo {
+                    title
+                    description
+                  }
                 }
               }
             }
           }
         `);
         pagesQuery = await pRes.json();
+      } catch (err) {
+        pagesQuery = { error: err.message };
+      }
 
+      try {
+        const { admin } = await unauthenticated.admin(offlineSession.shop);
         const aRes = await admin.graphql(`
-          query testArticles {
-            articles(first: 5) {
+          query getArticlesSeo {
+            articles(first: 10) {
               edges {
                 node {
                   id
                   title
                   handle
+                  summary
+                  blog {
+                    title
+                  }
+                  image {
+                    url
+                  }
+                  seo {
+                    title
+                    description
+                  }
                 }
               }
             }
           }
         `);
         articlesQuery = await aRes.json();
-
-        const tRes = await admin.graphql(`
-          query testThemes {
-            themes(first: 5) {
-              edges {
-                node {
-                  id
-                  name
-                  role
-                }
-              }
-            }
-          }
-        `);
-        themesQuery = await tRes.json();
       } catch (err) {
-        pagesQuery = { error: err.message };
+        articlesQuery = { error: err.message };
       }
     }
 
