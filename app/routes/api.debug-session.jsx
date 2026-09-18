@@ -18,11 +18,14 @@ export const loader = async ({ request }) => {
     let articlesQuery = null;
     let themesQuery = null;
 
+    let pErr = null;
+    let aErr = null;
+
     if (offlineSession?.shop) {
       try {
         const { admin } = await unauthenticated.admin(offlineSession.shop);
         const pRes = await admin.graphql(`
-          query getPagesSeo {
+          query getPagesTest {
             pages(first: 10) {
               edges {
                 node {
@@ -30,10 +33,8 @@ export const loader = async ({ request }) => {
                   title
                   handle
                   bodySummary
-                  seo {
-                    title
-                    description
-                  }
+                  seoTitle: metafield(namespace: "global", key: "title_tag") { value }
+                  seoDesc: metafield(namespace: "global", key: "description_tag") { value }
                 }
               }
             }
@@ -41,13 +42,13 @@ export const loader = async ({ request }) => {
         `);
         pagesQuery = await pRes.json();
       } catch (err) {
-        pagesQuery = { error: err.message };
+        pErr = err.message;
       }
 
       try {
         const { admin } = await unauthenticated.admin(offlineSession.shop);
         const aRes = await admin.graphql(`
-          query getArticlesSeo {
+          query getArticlesTest {
             articles(first: 10) {
               edges {
                 node {
@@ -55,16 +56,9 @@ export const loader = async ({ request }) => {
                   title
                   handle
                   summary
-                  blog {
-                    title
-                  }
-                  image {
-                    url
-                  }
-                  seo {
-                    title
-                    description
-                  }
+                  blog { title }
+                  seoTitle: metafield(namespace: "global", key: "title_tag") { value }
+                  seoDesc: metafield(namespace: "global", key: "description_tag") { value }
                 }
               }
             }
@@ -72,7 +66,7 @@ export const loader = async ({ request }) => {
         `);
         articlesQuery = await aRes.json();
       } catch (err) {
-        articlesQuery = { error: err.message };
+        aErr = err.message;
       }
     }
 
@@ -80,7 +74,8 @@ export const loader = async ({ request }) => {
       sessions,
       pagesQuery,
       articlesQuery,
-      themesQuery,
+      pErr,
+      aErr,
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

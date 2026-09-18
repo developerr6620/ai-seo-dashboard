@@ -198,17 +198,33 @@ export const action = async ({ request }) => {
         });
 
         try {
+          const metafields = [
+            {
+              ownerId: pageId,
+              namespace: "global",
+              key: "title_tag",
+              type: "string",
+              value: limited.title,
+            },
+          ];
+          if (limited.description) {
+            metafields.push({
+              ownerId: pageId,
+              namespace: "global",
+              key: "description_tag",
+              type: "string",
+              value: limited.description,
+            });
+          }
+
           const res = await admin.graphql(
             `#graphql
-            mutation updatePageSeo($id: ID!, $page: PageUpdateInput!) {
-              pageUpdate(id: $id, page: $page) {
-                page {
+            mutation setPageSeoMetafields($metafields: [MetafieldsSetInput!]!) {
+              metafieldsSet(metafields: $metafields) {
+                metafields {
                   id
-                  title
-                  seo {
-                    title
-                    description
-                  }
+                  key
+                  value
                 }
                 userErrors {
                   field
@@ -217,19 +233,11 @@ export const action = async ({ request }) => {
               }
             }`,
             {
-              variables: {
-                id: pageId,
-                page: {
-                  seo: {
-                    title: limited.title,
-                    description: limited.description,
-                  },
-                },
-              },
+              variables: { metafields },
             }
           );
           const resJson = await res.json();
-          const userErrors = resJson?.data?.pageUpdate?.userErrors || [];
+          const userErrors = resJson?.data?.metafieldsSet?.userErrors || [];
           if (userErrors.length > 0) {
             errors.push({ id: pageId, error: userErrors.map((e) => e.message).join(", ") });
           } else {
@@ -267,17 +275,33 @@ export const action = async ({ request }) => {
         });
 
         try {
+          const metafields = [
+            {
+              ownerId: artId,
+              namespace: "global",
+              key: "title_tag",
+              type: "string",
+              value: limited.title,
+            },
+          ];
+          if (limited.description) {
+            metafields.push({
+              ownerId: artId,
+              namespace: "global",
+              key: "description_tag",
+              type: "string",
+              value: limited.description,
+            });
+          }
+
           const res = await admin.graphql(
             `#graphql
-            mutation updateArticleSeo($id: ID!, $article: ArticleUpdateInput!) {
-              articleUpdate(id: $id, article: $article) {
-                article {
+            mutation setArticleSeoMetafields($metafields: [MetafieldsSetInput!]!) {
+              metafieldsSet(metafields: $metafields) {
+                metafields {
                   id
-                  title
-                  seo {
-                    title
-                    description
-                  }
+                  key
+                  value
                 }
                 userErrors {
                   field
@@ -286,19 +310,11 @@ export const action = async ({ request }) => {
               }
             }`,
             {
-              variables: {
-                id: artId,
-                article: {
-                  seo: {
-                    title: limited.title,
-                    description: limited.description,
-                  },
-                },
-              },
+              variables: { metafields },
             }
           );
           const resJson = await res.json();
-          const userErrors = resJson?.data?.articleUpdate?.userErrors || [];
+          const userErrors = resJson?.data?.metafieldsSet?.userErrors || [];
           if (userErrors.length > 0) {
             errors.push({ id: artId, error: userErrors.map((e) => e.message).join(", ") });
           } else {

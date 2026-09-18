@@ -308,9 +308,11 @@ export const loader = async ({ request }) => {
                 title
                 handle
                 bodySummary
-                seo {
-                  title
-                  description
+                seoTitle: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoDesc: metafield(namespace: "global", key: "description_tag") {
+                  value
                 }
               }
             }
@@ -318,22 +320,28 @@ export const loader = async ({ request }) => {
         }`
       );
       const pageData = await pageRes.json();
-      if (pageData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+      if (pageData?.errors?.some((e) => {
+        const msg = (e.message || "").toLowerCase();
+        return msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"));
+      })) {
         contentScopeError = true;
-      } else {
-        pages = (pageData?.data?.pages?.edges || []).map((e) => ({
+      } else if (pageData?.data?.pages?.edges) {
+        pages = pageData.data.pages.edges.map((e) => ({
           id: e.node.id,
           title: e.node.title || "Untitled Page",
           handle: e.node.handle || "",
           bodySummary: e.node.bodySummary || "",
-          seoTitle: e.node.seo?.title || "",
-          seoDescription: e.node.seo?.description || "",
-          hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
+          seoTitle: e.node.seoTitle?.value || "",
+          seoDescription: e.node.seoDesc?.value || "",
+          hasCustomSeoTitle: Boolean(e.node.seoTitle?.value?.trim()),
         }));
       }
     } catch (pageErr) {
       console.warn("Pages fetch error:", pageErr.message);
-      contentScopeError = true;
+      const msg = (pageErr.message || "").toLowerCase();
+      if (msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"))) {
+        contentScopeError = true;
+      }
     }
 
     try {
@@ -353,9 +361,11 @@ export const loader = async ({ request }) => {
                 image {
                   url
                 }
-                seo {
-                  title
-                  description
+                seoTitle: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoDesc: metafield(namespace: "global", key: "description_tag") {
+                  value
                 }
               }
             }
@@ -363,26 +373,30 @@ export const loader = async ({ request }) => {
         }`
       );
       const artData = await artRes.json();
-      if (artData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+      if (artData?.errors?.some((e) => {
+        const msg = (e.message || "").toLowerCase();
+        return msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"));
+      })) {
         contentScopeError = true;
-      } else if (artData?.errors?.length > 0) {
-        console.warn("Articles GraphQL errors:", artData.errors);
-      } else {
-        articles = (artData?.data?.articles?.edges || []).map((e) => ({
+      } else if (artData?.data?.articles?.edges) {
+        articles = artData.data.articles.edges.map((e) => ({
           id: e.node.id,
           title: e.node.title || "Untitled Article",
           handle: e.node.handle || "",
-          summary: e.node.summary || "",
+          summary: (e.node.summary || "").replace(/<[^>]*>/g, "").slice(0, 160),
           blogTitle: e.node.blog?.title || "Blog",
           imageUrl: e.node.image?.url || null,
-          seoTitle: e.node.seo?.title || "",
-          seoDescription: e.node.seo?.description || "",
-          hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
+          seoTitle: e.node.seoTitle?.value || "",
+          seoDescription: e.node.seoDesc?.value || "",
+          hasCustomSeoTitle: Boolean(e.node.seoTitle?.value?.trim()),
         }));
       }
     } catch (artErr) {
       console.warn("Articles fetch error:", artErr.message);
-      contentScopeError = true;
+      const msg = (artErr.message || "").toLowerCase();
+      if (msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"))) {
+        contentScopeError = true;
+      }
     }
 
     return {

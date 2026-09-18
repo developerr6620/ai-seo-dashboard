@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   TITLE_MAX,
   DESC_MAX,
@@ -19,6 +19,10 @@ export function BulkCollectionsView({
   onNotify,
 }) {
   const [collections, setCollections] = useState(initialCollections);
+
+  useEffect(() => {
+    setCollections(initialCollections || []);
+  }, [initialCollections]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all"); // "all" | "missing-title" | "missing-desc" | "optimized"
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -516,6 +520,10 @@ export function BulkPagesView({
   const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
 
   const [pages, setPages] = useState(initialPages);
+
+  useEffect(() => {
+    setPages(initialPages || []);
+  }, [initialPages]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -1116,6 +1124,10 @@ export function BulkArticlesView({
   const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
 
   const [articles, setArticles] = useState(initialArticles);
+
+  useEffect(() => {
+    setArticles(initialArticles || []);
+  }, [initialArticles]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
   const [selectedIds, setSelectedIds] = useState(new Set());
