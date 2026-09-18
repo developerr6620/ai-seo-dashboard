@@ -109,54 +109,118 @@ export const loader = async ({ request }) => {
     let articleSeoData = [];
     let contentScopeError = false;
     try {
-      const pRes = await admin.graphql(`
+      const pRes = await admin.graphql(
+        `#graphql
         query getPagesSeo {
           pages(first: 100) {
             edges {
               node {
                 id
-                seo { title description }
-                keywordsMetafield: metafield(namespace: "seo", key: "keywords") { value }
+                title
+                seoTitle: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
+                seoDesc: metafield(namespace: "global", key: "description_tag") {
+                  value
+                }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
           }
-        }
-      `);
+        }`
+      );
       const pData = await pRes.json();
-      if (pData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+      if (pData?.errors?.some((e) => {
+        const msg = (e.message || "").toLowerCase();
+        return msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"));
+      })) {
         contentScopeError = true;
-      } else {
-        pageSeoData = pData?.data?.pages?.edges?.map((e) => e.node) || [];
+      } else if (pData?.data?.pages?.edges) {
+        pageSeoData = pData.data.pages.edges.map((e) => {
+          const rawTitle = e.node.seoTitle?.value || e.node.seoTitleMetafield?.value || "";
+          const rawDesc = e.node.seoDesc?.value || "";
+          const effectiveTitle = rawTitle || (rawDesc ? (e.node.title?.length <= 50 ? e.node.title : e.node.title?.slice(0, 50)) : "");
+          return {
+            id: e.node.id,
+            title: e.node.title || "Untitled Page",
+            seo: {
+              title: effectiveTitle,
+              description: rawDesc,
+            },
+            keywordsMetafield: e.node.keywordsMetafield,
+          };
+        });
         pagesCount = pageSeoData.length;
       }
     } catch (e) {
-      contentScopeError = true;
+      console.warn("Pages fetch error:", e);
+      const msg = (e?.message || "").toLowerCase();
+      if (msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"))) {
+        contentScopeError = true;
+      }
     }
 
     // 5. Fetch articles SEO
     try {
-      const aRes = await admin.graphql(`
+      const aRes = await admin.graphql(
+        `#graphql
         query getArticlesSeo {
           articles(first: 100) {
             edges {
               node {
                 id
-                seo { title description }
-                keywordsMetafield: metafield(namespace: "seo", key: "keywords") { value }
+                title
+                seoTitle: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
+                seoDesc: metafield(namespace: "global", key: "description_tag") {
+                  value
+                }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
           }
-        }
-      `);
+        }`
+      );
       const aData = await aRes.json();
-      if (aData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+      if (aData?.errors?.some((e) => {
+        const msg = (e.message || "").toLowerCase();
+        return msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"));
+      })) {
         contentScopeError = true;
-      } else {
-        articleSeoData = aData?.data?.articles?.edges?.map((e) => e.node) || [];
+      } else if (aData?.data?.articles?.edges) {
+        articleSeoData = aData.data.articles.edges.map((e) => {
+          const rawTitle = e.node.seoTitle?.value || e.node.seoTitleMetafield?.value || "";
+          const rawDesc = e.node.seoDesc?.value || "";
+          const effectiveTitle = rawTitle || (rawDesc ? (e.node.title?.length <= 50 ? e.node.title : e.node.title?.slice(0, 50)) : "");
+          return {
+            id: e.node.id,
+            title: e.node.title || "Untitled Article",
+            seo: {
+              title: effectiveTitle,
+              description: rawDesc,
+            },
+            keywordsMetafield: e.node.keywordsMetafield,
+          };
+        });
         articlesCount = articleSeoData.length;
       }
     } catch (e) {
-      contentScopeError = true;
+      console.warn("Articles fetch error:", e);
+      const msg = (e?.message || "").toLowerCase();
+      if (msg.includes("write_content") || msg.includes("read_content") || (msg.includes("access") && !msg.includes("field"))) {
+        contentScopeError = true;
+      }
     }
 
     // 6. Compute per-category SEO scores
@@ -276,59 +340,11 @@ export default function Dashboard() {
   const globalSeoScore = initialGlobalScore;
   const seoBreakdown = initialBreakdown;
 
-  const [pagesCount, setPagesCount] = useState(initialPagesCount);
-  const [articlesCount, setArticlesCount] = useState(initialArticlesCount);
-  const [isCreatingPages, setIsCreatingPages] = useState(false);
-  const [isCreatingArticle, setIsCreatingArticle] = useState(false);
+  const pagesCount = initialPagesCount;
+  const articlesCount = initialArticlesCount;
   const [dashToast, setDashToast] = useState(null);
 
   const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
-
-  const handleCreateStarterPages = async () => {
-    setIsCreatingPages(true);
-    try {
-      const res = await fetch("/api/create-starter-pages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storeName: shop.name }),
-      });
-      const data = await res.json();
-      if (data.success && data.pages?.length > 0) {
-        setPagesCount((prev) => prev + data.pages.length);
-        setDashToast(`🎉 Successfully created ${data.pages.length} essential SEO pages in Shopify!`);
-      } else {
-        setDashToast(`⚠️ ${data.error || "Could not create pages"}`);
-      }
-    } catch (err) {
-      setDashToast(`⚠️ Error: ${err.message}`);
-    } finally {
-      setIsCreatingPages(false);
-      setTimeout(() => setDashToast(null), 5000);
-    }
-  };
-
-  const handleCreateStarterArticle = async () => {
-    setIsCreatingArticle(true);
-    try {
-      const res = await fetch("/api/create-starter-pages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceType: "article", storeName: shop.name }),
-      });
-      const data = await res.json();
-      if (data.success && data.articles?.length > 0) {
-        setArticlesCount((prev) => prev + data.articles.length);
-        setDashToast(`🎉 Successfully created starter blog article in Shopify!`);
-      } else {
-        setDashToast(`⚠️ ${data.error || "Could not create article"}`);
-      }
-    } catch (err) {
-      setDashToast(`⚠️ Error: ${err.message}`);
-    } finally {
-      setIsCreatingArticle(false);
-      setTimeout(() => setDashToast(null), 5000);
-    }
-  };
 
   // Poll for audit completion if background scan is in progress
   useEffect(() => {
@@ -737,63 +753,28 @@ export default function Dashboard() {
                 </span>
               </div>
               <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "8px" }}>
-                {pagesCount}
+                {pagesCount.toLocaleString()}
               </div>
               <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
-                {pagesCount > 0 ? "Content Pages (About, Contact, FAQ)" : "0 Pages in Shopify"}
+                Content Pages (About, Contact, FAQ)
               </div>
             </div>
-            {pagesCount > 0 ? (
-              <Link
-                to="/app/bulk-optimizer?resource=pages"
-                style={{
-                  background: "#4338ca",
-                  color: "#ffffff",
-                  padding: "8px 14px",
-                  borderRadius: "8px",
-                  fontWeight: "700",
-                  fontSize: "12px",
-                  textDecoration: "none",
-                  textAlign: "center",
-                  display: "block",
-                }}
-              >
-                ⚡ Bulk Optimize Pages →
-              </Link>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <button
-                  type="button"
-                  disabled={isCreatingPages}
-                  onClick={handleCreateStarterPages}
-                  style={{
-                    background: "linear-gradient(135deg, #4338ca 0%, #3730a3 100%)",
-                    color: "#ffffff",
-                    border: "none",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    fontWeight: "700",
-                    fontSize: "12px",
-                    cursor: isCreatingPages ? "wait" : "pointer",
-                    textAlign: "center",
-                  }}
-                >
-                  {isCreatingPages ? "⏳ Creating Pages..." : "⚡ 1-Click: Create Essential Pages"}
-                </button>
-                <Link
-                  to="/app/bulk-optimizer?resource=pages"
-                  style={{
-                    color: "#4338ca",
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    textAlign: "center",
-                    textDecoration: "none",
-                  }}
-                >
-                  View in SEO Bulk Optimizer →
-                </Link>
-              </div>
-            )}
+            <Link
+              to="/app/bulk-optimizer?resource=pages"
+              style={{
+                background: "#f1f5f9",
+                color: "#0f172a",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                fontWeight: "700",
+                fontSize: "12px",
+                textDecoration: "none",
+                textAlign: "center",
+                display: "block",
+              }}
+            >
+              ⚡ Bulk Optimize Pages →
+            </Link>
           </div>
 
           {/* Blog Articles */}
@@ -818,63 +799,28 @@ export default function Dashboard() {
                 </span>
               </div>
               <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "8px" }}>
-                {articlesCount}
+                {articlesCount.toLocaleString()}
               </div>
               <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
-                {articlesCount > 0 ? "Editorial Blog Articles" : "0 Blog Articles in Shopify"}
+                Editorial Blog Articles
               </div>
             </div>
-            {articlesCount > 0 ? (
-              <Link
-                to="/app/bulk-optimizer?resource=articles"
-                style={{
-                  background: "#0e7490",
-                  color: "#ffffff",
-                  padding: "8px 14px",
-                  borderRadius: "8px",
-                  fontWeight: "700",
-                  fontSize: "12px",
-                  textDecoration: "none",
-                  textAlign: "center",
-                  display: "block",
-                }}
-              >
-                ⚡ Bulk Optimize Articles →
-              </Link>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <button
-                  type="button"
-                  disabled={isCreatingArticle}
-                  onClick={handleCreateStarterArticle}
-                  style={{
-                    background: "linear-gradient(135deg, #0e7490 0%, #0369a1 100%)",
-                    color: "#ffffff",
-                    border: "none",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    fontWeight: "700",
-                    fontSize: "12px",
-                    cursor: isCreatingArticle ? "wait" : "pointer",
-                    textAlign: "center",
-                  }}
-                >
-                  {isCreatingArticle ? "⏳ Creating Article..." : "⚡ 1-Click: Create Starter Article"}
-                </button>
-                <Link
-                  to="/app/bulk-optimizer?resource=articles"
-                  style={{
-                    color: "#0e7490",
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    textAlign: "center",
-                    textDecoration: "none",
-                  }}
-                >
-                  View in SEO Bulk Optimizer →
-                </Link>
-              </div>
-            )}
+            <Link
+              to="/app/bulk-optimizer?resource=articles"
+              style={{
+                background: "#f1f5f9",
+                color: "#0f172a",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                fontWeight: "700",
+                fontSize: "12px",
+                textDecoration: "none",
+                textAlign: "center",
+                display: "block",
+              }}
+            >
+              ⚡ Bulk Optimize Articles →
+            </Link>
           </div>
         </div>
       </s-section>
