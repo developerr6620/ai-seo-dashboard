@@ -14,26 +14,37 @@ export default function App() {
         <style>{`
           :root {
             --p-page-width: 100% !important;
+            --p-page-max-width: 100% !important;
           }
           html, body {
             margin: 0;
             padding: 0;
+            width: 100% !important;
+            max-width: 100% !important;
             background-color: #f8fafc;
             font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             color: #0f172a;
             -webkit-font-smoothing: antialiased;
           }
           s-page {
-            display: block;
+            display: block !important;
             width: 100% !important;
             max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           s-page::part(container),
           s-page::part(page),
+          s-page::part(content),
+          s-page::part(body),
           .Polaris-Page,
-          .Polaris-Page--fullWidth {
+          .Polaris-Page--fullWidth,
+          .Polaris-Page__Content,
+          div[class*="Polaris-Page"],
+          div[class*="Page-Container"] {
             max-width: 100% !important;
             width: 100% !important;
+            margin: 0 !important;
           }
         `}</style>
         <Meta />

@@ -504,18 +504,46 @@ export default function BulkOptimizer() {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        s-page {
-          display: block;
+        :root {
+          --p-page-width: 100% !important;
+          --p-page-max-width: 100% !important;
+        }
+        body, html {
+          margin: 0 !important;
+          padding: 0 !important;
           width: 100% !important;
           max-width: 100% !important;
         }
+        s-page {
+          display: block !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        s-page::part(container),
+        s-page::part(page),
+        s-page::part(content),
+        s-page::part(body),
+        .Polaris-Page,
+        .Polaris-Page--fullWidth,
+        .Polaris-Page__Content,
+        div[class*="Polaris-Page"],
+        div[class*="Page-Container"] {
+          max-width: 100% !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding-left: 6px !important;
+          padding-right: 6px !important;
+          box-sizing: border-box !important;
+        }
         s-section {
-          display: block;
+          display: block !important;
           width: 100% !important;
           max-width: 100% !important;
         }
       `}</style>
-      <div style={{ width: "100%", maxWidth: "100%", margin: "0 auto", padding: "0 12px", boxSizing: "border-box" }}>
+      <div style={{ width: "100%", maxWidth: "100%", margin: "0", padding: "0 6px", boxSizing: "border-box" }}>
 
       {/* Toast Notification */}
       {toastMessage && (

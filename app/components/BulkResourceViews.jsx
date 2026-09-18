@@ -13,9 +13,9 @@ import {
 } from "../lib/seoCopy";
 
 /**
- * Unified, distraction-free Bulk Resource Table component.
+ * Unified, spacious, distraction-free Bulk Resource Table component.
  * Powers Products, Collections, Pages, and Blog Articles with 100% identical design,
- * colors, layout, action buttons, and table interactions.
+ * colors, generous spacing, dedicated keywords column, and table interactions.
  */
 export function BulkResourceTable({
   resourceType,
@@ -44,12 +44,24 @@ export function BulkResourceTable({
 
   const getTitle = (item) => (drafts[item.id]?.seoTitle !== undefined ? drafts[item.id].seoTitle : item.seoTitle || "");
   const getDesc = (item) => (drafts[item.id]?.seoDescription !== undefined ? drafts[item.id].seoDescription : item.seoDescription || "");
+  const getKeywords = (item) => {
+    if (drafts[item.id]?.keywords !== undefined) {
+      const kw = drafts[item.id].keywords;
+      return Array.isArray(kw) ? kw.join(", ") : String(kw || "");
+    }
+    if (Array.isArray(item.keywords)) return item.keywords.join(", ");
+    return item.keywords || "";
+  };
   const isDirty = (item) => drafts[item.id] !== undefined;
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return items.filter((item) => {
-      const match = !q || item.title?.toLowerCase().includes(q) || (item.handle && item.handle.toLowerCase().includes(q));
+      const match =
+        !q ||
+        item.title?.toLowerCase().includes(q) ||
+        (item.handle && item.handle.toLowerCase().includes(q)) ||
+        getKeywords(item).toLowerCase().includes(q);
       if (!match) return false;
 
       const t = getTitle(item);
@@ -93,13 +105,13 @@ export function BulkResourceTable({
       newDrafts[item.id] = {
         seoTitle: generated.title,
         seoDescription: generated.description,
-        ...(generated.keywords ? { keywords: generated.keywords } : {}),
+        keywords: generated.keywords || [],
       };
     });
 
     setDrafts(newDrafts);
     setIsGenerating(false);
-    onNotify?.(`✨ Generated SEO for ${targetItems.length} items! Click "Save to Shopify" to apply.`);
+    onNotify?.(`✨ Generated SEO & Keywords for ${targetItems.length} items! Review & click "Save to Shopify".`);
   };
 
   const handleSave = async (itemsToSave) => {
@@ -118,16 +130,22 @@ export function BulkResourceTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             resourceType,
-            items: chunk.map((item) => ({
-              id: item.id,
-              productId: item.id,
-              collectionId: item.id,
-              pageId: item.id,
-              articleId: item.id,
-              seoTitle: getTitle(item),
-              seoDescription: getDesc(item),
-              keywords: drafts[item.id]?.keywords || item.keywords || [],
-            })),
+            items: chunk.map((item) => {
+              const kwRaw = getKeywords(item);
+              const kwList = typeof kwRaw === "string"
+                ? kwRaw.split(",").map((k) => k.trim()).filter(Boolean)
+                : Array.isArray(kwRaw) ? kwRaw : [];
+              return {
+                id: item.id,
+                productId: item.id,
+                collectionId: item.id,
+                pageId: item.id,
+                articleId: item.id,
+                seoTitle: getTitle(item),
+                seoDescription: getDesc(item),
+                keywords: kwList,
+              };
+            }),
           }),
         });
         const d = await res.json();
@@ -137,10 +155,15 @@ export function BulkResourceTable({
             prev.map((item) => {
               const matched = chunk.find((c) => c.id === item.id);
               if (matched) {
+                const kwRaw = getKeywords(item);
+                const kwList = typeof kwRaw === "string"
+                  ? kwRaw.split(",").map((k) => k.trim()).filter(Boolean)
+                  : Array.isArray(kwRaw) ? kwRaw : [];
                 return {
                   ...item,
                   seoTitle: getTitle(item),
                   seoDescription: getDesc(item),
+                  keywords: kwList,
                   hasCustomSeoTitle: true,
                 };
               }
@@ -166,28 +189,65 @@ export function BulkResourceTable({
   const dirtyItems = items.filter(isDirty);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-      {/* Unified Executive Hero Card */}
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%" }}>
+      {/* Unified Executive Hero Card with Generous Spacing */}
       <div
         style={{
           background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
           borderRadius: "14px",
-          padding: "22px 24px",
+          padding: "26px 30px",
           color: "#ffffff",
           boxShadow: "0 4px 16px rgba(15, 23, 42, 0.25)",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px" }}>
-          <div>
-            <div style={{ fontSize: "11px", fontWeight: "700", letterSpacing: "0.6px", color: "#38bdf8", textTransform: "uppercase" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
+          <div style={{ flex: "1 1 500px", maxWidth: "720px" }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "11px",
+                fontWeight: "700",
+                letterSpacing: "0.8px",
+                color: "#38bdf8",
+                textTransform: "uppercase",
+                background: "rgba(56, 189, 248, 0.12)",
+                border: "1px solid rgba(56, 189, 248, 0.3)",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                marginBottom: "12px",
+              }}
+            >
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#38bdf8", display: "inline-block" }}></span>
               {categoryLabel} SEO
             </div>
-            <h3 style={{ fontSize: "20px", fontWeight: "800", margin: "4px 0" }}>
+
+            <h2
+              style={{
+                fontSize: "23px",
+                fontWeight: "800",
+                margin: "0 0 10px 0",
+                color: "#ffffff",
+                letterSpacing: "-0.2px",
+                lineHeight: "1.3",
+              }}
+            >
               {title} ({stats.total} items)
-            </h3>
-            <div style={{ fontSize: "13px", opacity: 0.85, color: "#94a3b8" }}>
+            </h2>
+
+            <p
+              style={{
+                fontSize: "14px",
+                lineHeight: "1.6",
+                color: "#94a3b8",
+                margin: 0,
+              }}
+            >
               {description}
-            </div>
+            </p>
           </div>
 
           <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
@@ -200,13 +260,14 @@ export function BulkResourceTable({
                 color: selectedIds.size > 0 ? "#ffffff" : "rgba(255, 255, 255, 0.4)",
                 border: "1px solid rgba(255, 255, 255, 0.2)",
                 borderRadius: "8px",
-                padding: "9px 16px",
+                padding: "10px 16px",
                 fontSize: "12px",
                 fontWeight: "700",
                 cursor: selectedIds.size > 0 ? "pointer" : "not-allowed",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
+                transition: "all 0.15s ease",
               }}
             >
               ⚡ Generate for Selected ({selectedIds.size})
@@ -221,7 +282,7 @@ export function BulkResourceTable({
                 color: "#ffffff",
                 border: "none",
                 borderRadius: "8px",
-                padding: "9px 18px",
+                padding: "10px 18px",
                 fontSize: "12px",
                 fontWeight: "800",
                 cursor: "pointer",
@@ -229,6 +290,7 @@ export function BulkResourceTable({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
+                transition: "all 0.15s ease",
               }}
             >
               ✨ 1-Click: Generate All Missing ({stats.missingTitle + stats.missingDesc})
@@ -244,7 +306,7 @@ export function BulkResourceTable({
                   color: "#ffffff",
                   border: "none",
                   borderRadius: "8px",
-                  padding: "9px 18px",
+                  padding: "10px 20px",
                   fontSize: "12px",
                   fontWeight: "800",
                   cursor: isSaving ? "wait" : "pointer",
@@ -252,6 +314,7 @@ export function BulkResourceTable({
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
+                  transition: "all 0.15s ease",
                 }}
               >
                 {isSaving
@@ -264,16 +327,16 @@ export function BulkResourceTable({
       </div>
 
       {/* Unified Filter & Search Bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-        <div style={{ flex: "1 1 280px", maxWidth: "420px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", width: "100%" }}>
+        <div style={{ flex: "1 1 300px", maxWidth: "460px" }}>
           <input
             type="text"
-            placeholder={`🔍 Search ${categoryLabel.toLowerCase()} by title...`}
+            placeholder={`🔍 Search ${categoryLabel.toLowerCase()} by title or keyword...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: "100%",
-              padding: "9px 12px",
+              padding: "10px 14px",
               borderRadius: "8px",
               border: "1px solid #cbd5e1",
               fontSize: "13px",
@@ -301,10 +364,11 @@ export function BulkResourceTable({
                   color: isSel ? "#ffffff" : f.warn ? "#ea580c" : "#475569",
                   border: `1.5px solid ${isSel ? "#0f172a" : f.warn ? "#fdba74" : "#cbd5e1"}`,
                   borderRadius: "7px",
-                  padding: "6px 12px",
+                  padding: "7px 13px",
                   fontSize: "12px",
                   fontWeight: "700",
                   cursor: "pointer",
+                  transition: "all 0.15s ease",
                 }}
               >
                 {f.label}
@@ -315,7 +379,7 @@ export function BulkResourceTable({
       </div>
 
       {/* Unified Select All Bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "8px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "8px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", width: "100%", boxSizing: "border-box" }}>
         <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: "600", color: "#334155", cursor: "pointer" }}>
           <input
             type="checkbox"
@@ -336,29 +400,40 @@ export function BulkResourceTable({
           <button
             type="button"
             onClick={() => setSelectedIds(new Set())}
-            style={{ background: "none", border: "none", color: "#64748b", fontSize: "11px", cursor: "pointer", textDecoration: "underline" }}
+            style={{ background: "none", border: "none", color: "#64748b", fontSize: "12px", cursor: "pointer", textDecoration: "underline" }}
           >
             Clear selection ({selectedIds.size})
           </button>
         )}
       </div>
 
-      {/* Unified Table */}
-      <div style={{ background: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+      {/* Unified Table - Wide Max Width, 6 Columns */}
+      <div
+        style={{
+          background: "#ffffff",
+          borderRadius: "10px",
+          border: "1px solid #e2e8f0",
+          overflowX: "auto",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        <table style={{ width: "100%", minWidth: "1050px", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
           <thead>
             <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
-              <th style={{ width: "40px", padding: "12px 14px" }}></th>
-              <th style={{ width: "240px", padding: "12px 14px" }}>{categoryLabel.slice(0, -1) || "Item"}</th>
-              <th style={{ width: "320px", padding: "12px 14px" }}>SEO Title (Max {TITLE_MAX})</th>
-              <th style={{ padding: "12px 14px" }}>SEO Description (Max {DESC_MAX})</th>
-              <th style={{ width: "100px", padding: "12px 14px", textAlign: "right" }}>Status</th>
+              <th style={{ width: "38px", padding: "12px 14px" }}></th>
+              <th style={{ width: "200px", minWidth: "170px", padding: "12px 14px" }}>{categoryLabel.slice(0, -1) || "Item"}</th>
+              <th style={{ width: "220px", padding: "12px 14px" }}>SEO Title (Max {TITLE_MAX})</th>
+              <th style={{ width: "230px", padding: "12px 14px" }}>Target Keywords</th>
+              <th style={{ padding: "12px 14px", minWidth: "300px" }}>SEO Description (Max {DESC_MAX})</th>
+              <th style={{ width: "95px", padding: "12px 14px", textAlign: "right" }}>Status</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
+                <td colSpan={6} style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
                   No items match your current search/filter.
                 </td>
               </tr>
@@ -367,9 +442,11 @@ export function BulkResourceTable({
                 const isSelected = selectedIds.has(item.id);
                 const titleVal = getTitle(item);
                 const descVal = getDesc(item);
+                const keywordsVal = getKeywords(item);
                 const dirty = isDirty(item);
                 const titleLen = titleVal.length;
                 const descLen = descVal.length;
+                const kwArray = keywordsVal.split(",").map((k) => k.trim()).filter(Boolean);
 
                 return (
                   <tr
@@ -379,7 +456,7 @@ export function BulkResourceTable({
                       background: isSelected ? "#f0fdf4" : dirty ? "#fefce8" : "transparent",
                     }}
                   >
-                    <td style={{ padding: "12px 14px" }}>
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -391,21 +468,16 @@ export function BulkResourceTable({
                         }}
                       />
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <div style={{ fontWeight: "700", color: "#0f172a" }}>{item.title}</div>
-                      {item.handle && <div style={{ fontSize: "11px", color: "#64748b" }}>/{item.handle}</div>}
-                      {item.blogTitle && <div style={{ fontSize: "11px", color: "#64748b" }}>Blog: {item.blogTitle}</div>}
-                      {item.keywords && item.keywords.length > 0 && (
-                        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
-                          {item.keywords.slice(0, 3).map((kw, i) => (
-                            <span key={i} style={{ fontSize: "10px", background: "#f1f5f9", color: "#475569", padding: "1px 5px", borderRadius: "3px" }}>
-                              #{kw}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+
+                    {/* Column 2: Item Name & Handle */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                      <div style={{ fontWeight: "700", color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
+                      {item.handle && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>/{item.handle}</div>}
+                      {item.blogTitle && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>Blog: {item.blogTitle}</div>}
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
+
+                    {/* Column 3: SEO Title (made smaller) */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
                       <div style={{ position: "relative" }}>
                         <input
                           type="text"
@@ -417,10 +489,11 @@ export function BulkResourceTable({
                                 ...prev[item.id],
                                 seoTitle: e.target.value,
                                 seoDescription: getDesc(item),
+                                keywords: getKeywords(item),
                               },
                             }))
                           }
-                          placeholder={`Enter SEO title (max ${TITLE_MAX})...`}
+                          placeholder={`SEO title (max ${TITLE_MAX})...`}
                           style={{
                             width: "100%",
                             padding: "8px 10px",
@@ -428,13 +501,14 @@ export function BulkResourceTable({
                             borderRadius: "6px",
                             border: `1px solid ${titleLen > TITLE_MAX ? "#ef4444" : "#cbd5e1"}`,
                             boxSizing: "border-box",
+                            background: "#ffffff",
                           }}
                         />
                         <div
                           style={{
                             fontSize: "10px",
                             fontWeight: "700",
-                            marginTop: "3px",
+                            marginTop: "4px",
                             color: titleLen === 0 ? "#94a3b8" : titleLen <= TITLE_MAX ? "#16a34a" : "#ef4444",
                           }}
                         >
@@ -442,10 +516,70 @@ export function BulkResourceTable({
                         </div>
                       </div>
                     </td>
-                    <td style={{ padding: "12px 14px" }}>
+
+                    {/* Column 4: Target Keywords (Dedicated editable column for all resources) */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type="text"
+                          value={keywordsVal}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: {
+                                ...prev[item.id],
+                                seoTitle: getTitle(item),
+                                seoDescription: getDesc(item),
+                                keywords: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder="e.g. handmade, organic, deals..."
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            fontSize: "12px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            boxSizing: "border-box",
+                            background: "#ffffff",
+                          }}
+                        />
+                        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
+                          {kwArray.length > 0 ? (
+                            kwArray.slice(0, 3).map((kw, i) => (
+                              <span
+                                key={i}
+                                style={{
+                                  fontSize: "10px",
+                                  background: "#f0f9ff",
+                                  color: "#0369a1",
+                                  border: "1px solid #bae6fd",
+                                  padding: "1px 5px",
+                                  borderRadius: "4px",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                #{kw}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ fontSize: "10px", color: "#94a3b8" }}>Comma-separated keywords</span>
+                          )}
+                          {kwArray.length > 3 && (
+                            <span style={{ fontSize: "10px", color: "#64748b", fontWeight: "600" }}>
+                              +{kwArray.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Column 5: SEO Description (made larger) */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
                       <div style={{ position: "relative" }}>
                         <textarea
-                          rows={2}
+                          rows={3}
                           value={descVal}
                           onChange={(e) =>
                             setDrafts((prev) => ({
@@ -454,6 +588,7 @@ export function BulkResourceTable({
                                 ...prev[item.id],
                                 seoTitle: getTitle(item),
                                 seoDescription: e.target.value,
+                                keywords: getKeywords(item),
                               },
                             }))
                           }
@@ -462,17 +597,19 @@ export function BulkResourceTable({
                             width: "100%",
                             padding: "8px 10px",
                             fontSize: "12px",
+                            lineHeight: "1.4",
                             borderRadius: "6px",
                             border: `1px solid ${descLen > DESC_MAX ? "#ef4444" : "#cbd5e1"}`,
                             boxSizing: "border-box",
                             resize: "vertical",
+                            background: "#ffffff",
                           }}
                         />
                         <div
                           style={{
                             fontSize: "10px",
                             fontWeight: "700",
-                            marginTop: "3px",
+                            marginTop: "4px",
                             color: descLen === 0 ? "#94a3b8" : descLen <= DESC_MAX ? "#16a34a" : "#ef4444",
                           }}
                         >
@@ -480,18 +617,56 @@ export function BulkResourceTable({
                         </div>
                       </div>
                     </td>
-                    <td style={{ padding: "12px 14px", textAlign: "right" }}>
+
+                    {/* Column 6: Status */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top", textAlign: "right" }}>
                       {dirty ? (
-                        <span style={{ background: "#fef08a", color: "#854d0e", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "700" }}>
-                          Unsaved
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: "#fef3c7",
+                            color: "#92400e",
+                            border: "1px solid #fde68a",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          💾 Unsaved
                         </span>
-                      ) : titleLen > 0 && descLen > 0 && isTitleOk(titleVal) && isDescOk(descVal) ? (
-                        <span style={{ background: "#dcfce7", color: "#166534", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "700" }}>
-                          Optimized
+                      ) : titleLen > 0 && descLen > 0 && titleLen <= TITLE_MAX && descLen <= DESC_MAX ? (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: "#dcfce7",
+                            color: "#166534",
+                            border: "1px solid #bbf7d0",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ✅ Optimized
                         </span>
                       ) : (
-                        <span style={{ background: "#fee2e2", color: "#991b1b", padding: "4px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "700" }}>
-                          Missing
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: "#fee2e2",
+                            color: "#991b1b",
+                            border: "1px solid #fecaca",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ⚠️ Missing
                         </span>
                       )}
                     </td>
@@ -505,7 +680,7 @@ export function BulkResourceTable({
 
       {/* Optional Pagination Controls */}
       {pagination && pagination.totalPages > 1 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", width: "100%", boxSizing: "border-box" }}>
           <div style={{ fontSize: "13px", color: "#64748b" }}>
             Showing page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.totalCount} total)
           </div>
@@ -608,13 +783,21 @@ export function BulkCollectionsView({
       items={collections}
       storeName={storeName}
       onNotify={onNotify}
-      generateFn={(c, sName) =>
-        generateCollectionSeoCopy({
+      generateFn={(c, sName) => {
+        const kw = c.keywords && c.keywords.length > 0
+          ? c.keywords
+          : extractKeywords({ productTitle: c.title, productDescription: c.description || c.title });
+        const copy = generateCollectionSeoCopy({
           title: c.title,
           description: c.description,
           storeName: sName,
-        })
-      }
+        });
+        return {
+          title: copy.title,
+          description: copy.description,
+          keywords: kw,
+        };
+      }}
     />
   );
 }
@@ -636,13 +819,21 @@ export function BulkPagesView({
       items={pages}
       storeName={storeName}
       onNotify={onNotify}
-      generateFn={(p, sName) =>
-        generatePageSeoCopy({
+      generateFn={(p, sName) => {
+        const kw = p.keywords && p.keywords.length > 0
+          ? p.keywords
+          : extractKeywords({ productTitle: p.title, productDescription: p.bodySummary || p.title });
+        const copy = generatePageSeoCopy({
           title: p.title,
           body: p.bodySummary,
           storeName: sName,
-        })
-      }
+        });
+        return {
+          title: copy.title,
+          description: copy.description,
+          keywords: kw,
+        };
+      }}
     />
   );
 }
@@ -664,14 +855,22 @@ export function BulkArticlesView({
       items={articles}
       storeName={storeName}
       onNotify={onNotify}
-      generateFn={(a, sName) =>
-        generateArticleSeoCopy({
+      generateFn={(a, sName) => {
+        const kw = a.keywords && a.keywords.length > 0
+          ? a.keywords
+          : extractKeywords({ productTitle: a.title, productDescription: a.summary || a.title });
+        const copy = generateArticleSeoCopy({
           title: a.title,
           summary: a.summary,
           blogTitle: a.blogTitle,
           storeName: sName,
-        })
-      }
+        });
+        return {
+          title: copy.title,
+          description: copy.description,
+          keywords: kw,
+        };
+      }}
     />
   );
 }
