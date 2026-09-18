@@ -13,8 +13,22 @@ export const loader = async ({ request }) => {
   // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
   await ensureKeywordsMetafieldDefinition(admin, shopName);
 
+  // Helper: compute category score 0–100 (title=40%, desc=35%, keywords=25%)
+  function catScore(items) {
+    const n = items.length;
+    if (n === 0) return null; // null = no items, excluded from global score
+    const withTitle = items.filter((i) => i.seo?.title?.trim()).length;
+    const withDesc = items.filter((i) => i.seo?.description?.trim()).length;
+    const withKw = items.filter((i) => {
+      const v = i.keywordsMetafield?.value;
+      return Boolean(v && v.trim().length > 0 && v !== "[]" && v !== '""');
+    }).length;
+    const score = Math.round(((withTitle / n) * 40 + (withDesc / n) * 35 + (withKw / n) * 25));
+    return { score, total: n, withTitle, withDesc, withKw };
+  }
+
   try {
-    // 1. Fetch store info, exact total products count, and sample products
+    // 1. Fetch store info, products with SEO + images alt, collections, pages, articles
     const response = await admin.graphql(
       `#graphql
       query getDashboardData {
@@ -41,6 +55,14 @@ export const loader = async ({ request }) => {
               keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                 value
               }
+              images(first: 10) {
+                edges {
+                  node {
+                    id
+                    altText
+                  }
+                }
+              }
             }
           }
         }
@@ -52,34 +74,51 @@ export const loader = async ({ request }) => {
     const totalProducts = data?.data?.productsCount?.count || 0;
     const sampleProducts = data?.data?.products?.edges?.map((e) => e.node) || [];
 
-    // 2. Retrieve catalog audit metrics
+    // 2. Retrieve catalog audit metrics (product-focused existing system)
     const currentShop = shopName || shop.myshopifyDomain || "default-store";
     const auditResult = await getStoreAuditStats(admin, currentShop, totalProducts, sampleProducts);
 
-    // 3. Fetch collections, pages, and blog articles counts
+    // 3. Fetch collections SEO
     let collectionsCount = 0;
+    let collectionSeoData = [];
     try {
       const colRes = await admin.graphql(`
-        query getCollectionsCount {
+        query getCollectionsSeo {
           collections(first: 100) {
-            edges { node { id } }
+            edges {
+              node {
+                id
+                seo { title description }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") { value }
+              }
+            }
           }
         }
       `);
       const colData = await colRes.json();
-      collectionsCount = colData?.data?.collections?.edges?.length || 0;
+      collectionSeoData = colData?.data?.collections?.edges?.map((e) => e.node) || [];
+      collectionsCount = collectionSeoData.length;
     } catch (e) {
-      console.warn("Collections count error:", e);
+      console.warn("Collections SEO fetch error:", e);
     }
 
+    // 4. Fetch pages SEO
     let pagesCount = 0;
+    let pageSeoData = [];
     let articlesCount = 0;
+    let articleSeoData = [];
     let contentScopeError = false;
     try {
       const pRes = await admin.graphql(`
-        query getPagesCount {
+        query getPagesSeo {
           pages(first: 100) {
-            edges { node { id } }
+            edges {
+              node {
+                id
+                seo { title description }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") { value }
+              }
+            }
           }
         }
       `);
@@ -87,17 +126,25 @@ export const loader = async ({ request }) => {
       if (pData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
         contentScopeError = true;
       } else {
-        pagesCount = pData?.data?.pages?.edges?.length || 0;
+        pageSeoData = pData?.data?.pages?.edges?.map((e) => e.node) || [];
+        pagesCount = pageSeoData.length;
       }
     } catch (e) {
       contentScopeError = true;
     }
 
+    // 5. Fetch articles SEO
     try {
       const aRes = await admin.graphql(`
-        query getArticlesCount {
+        query getArticlesSeo {
           articles(first: 100) {
-            edges { node { id } }
+            edges {
+              node {
+                id
+                seo { title description }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") { value }
+              }
+            }
           }
         }
       `);
@@ -105,10 +152,44 @@ export const loader = async ({ request }) => {
       if (aData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
         contentScopeError = true;
       } else {
-        articlesCount = aData?.data?.articles?.edges?.length || 0;
+        articleSeoData = aData?.data?.articles?.edges?.map((e) => e.node) || [];
+        articlesCount = articleSeoData.length;
       }
     } catch (e) {
       contentScopeError = true;
+    }
+
+    // 6. Compute per-category SEO scores
+    const productCat = catScore(sampleProducts);
+    const collectionCat = catScore(collectionSeoData);
+    const pageCat = catScore(pageSeoData);
+    const articleCat = catScore(articleSeoData);
+
+    // Alt tag score: ratio of images with alt text across all products
+    let totalImages = 0;
+    let imagesWithAlt = 0;
+    for (const p of sampleProducts) {
+      const imgs = p.images?.edges?.map((e) => e.node) || [];
+      totalImages += imgs.length;
+      imagesWithAlt += imgs.filter((img) => img.altText && img.altText.trim().length > 0).length;
+    }
+    const altScore = totalImages > 0 ? Math.round((imagesWithAlt / totalImages) * 100) : null;
+
+    // 7. Weighted global score (weights: products 35, collections 20, pages 20, articles 15, alt 10)
+    const weights = [
+      { cat: productCat, weight: 35 },
+      { cat: collectionCat, weight: 20 },
+      { cat: pageCat, weight: 20 },
+      { cat: articleCat, weight: 15 },
+      { cat: altScore !== null ? { score: altScore } : null, weight: 10 },
+    ];
+    const activeCats = weights.filter((w) => w.cat !== null);
+    let globalSeoScore = 0;
+    if (activeCats.length > 0) {
+      const totalWeight = activeCats.reduce((sum, w) => sum + w.weight, 0);
+      globalSeoScore = Math.round(
+        activeCats.reduce((sum, w) => sum + (w.cat.score * w.weight), 0) / totalWeight
+      );
     }
 
     return {
@@ -128,6 +209,15 @@ export const loader = async ({ request }) => {
       contentScopeError,
       shopDomain: shop.myshopifyDomain || shopName,
       clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
+      // Global comprehensive score
+      globalSeoScore,
+      seoBreakdown: {
+        products: productCat,
+        collections: collectionCat,
+        pages: pageCat,
+        articles: articleCat,
+        altTags: altScore !== null ? { score: altScore, totalImages, imagesWithAlt } : null,
+      },
     };
   } catch (error) {
     console.error("Dashboard loader error:", error);
@@ -154,6 +244,8 @@ export const loader = async ({ request }) => {
       contentScopeError: false,
       shopDomain: "",
       clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
+      globalSeoScore: 0,
+      seoBreakdown: { products: null, collections: null, pages: null, articles: null, altTags: null },
     };
   }
 };
@@ -171,15 +263,18 @@ export default function Dashboard() {
     clientId = "cdeb2fd429e5b0cceb3d43906b7f2148",
     isAuditing: initialIsAuditing,
     lastAuditedAt: initialLastAudit,
+    globalSeoScore: initialGlobalScore = 0,
+    seoBreakdown: initialBreakdown = {},
   } = useLoaderData();
   const navigation = useNavigation();
   const isPageLoading = navigation.state === "loading";
 
-  const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [stats, setStats] = useState(initialStats);
   const [isAuditing, setIsAuditing] = useState(initialIsAuditing);
   const [lastAudit, setLastAudit] = useState(initialLastAudit);
   const [isTriggering, setIsTriggering] = useState(false);
+  const globalSeoScore = initialGlobalScore;
+  const seoBreakdown = initialBreakdown;
 
   const [pagesCount, setPagesCount] = useState(initialPagesCount);
   const [articlesCount, setArticlesCount] = useState(initialArticlesCount);
@@ -261,22 +356,6 @@ export default function Dashboard() {
 
     return () => clearInterval(interval);
   }, [isAuditing]);
-
-  // Auto-scroll to #theme-setup if URL has hash (e.g. from optimizer redirect)
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.location.hash === "#theme-setup") {
-      setTimeout(() => {
-        const el = document.getElementById("theme-setup");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth" });
-          el.style.boxShadow = "0 0 0 3px #10b981";
-          setTimeout(() => {
-            el.style.boxShadow = "0 4px 16px rgba(16, 185, 129, 0.08)";
-          }, 2500);
-        }
-      }, 150);
-    }
-  }, []);
 
   // Trigger manual catalog re-scan
   const handleTriggerReAudit = useCallback(async () => {
@@ -444,14 +523,14 @@ export default function Dashboard() {
               STORE SEO HEALTH
             </div>
             <div style={{ fontSize: "52px", fontWeight: "900", lineHeight: 1 }}>
-              {stats.seoScore}
+              {globalSeoScore}
             </div>
             <div style={{ fontSize: "13px", opacity: 0.85 }}>/ 100</div>
             <div style={{ fontSize: "12px", marginTop: "6px", fontWeight: "600" }}>
-              {stats.seoScore >= 80 ? "🟢 Excellent" : stats.seoScore >= 50 ? "🟡 Needs Work" : "🔴 Critical"}
+              {globalSeoScore >= 80 ? "🟢 Excellent" : globalSeoScore >= 50 ? "🟡 Needs Work" : "🔴 Critical"}
             </div>
             <div style={{ fontSize: "11px", marginTop: "4px", opacity: 0.8 }}>
-              Based on all {totalCatalog.toLocaleString()} catalog products
+              Products · Collections · Pages · Blogs · Alt Tags
             </div>
           </div>
         </div>
@@ -909,19 +988,6 @@ export default function Dashboard() {
                 ✓ All {totalCatalog.toLocaleString()} products have keywords
               </div>
             )}
-            <a
-              href="#theme-setup"
-              style={{
-                fontSize: "11px",
-                color: "#0284c7",
-                fontWeight: "700",
-                textDecoration: "underline",
-                display: "inline-block",
-                marginTop: "6px",
-              }}
-            >
-              ⚡ Theme Snippet Setup ↓
-            </a>
           </div>
 
           {/* Optimal Length */}
@@ -947,127 +1013,239 @@ export default function Dashboard() {
         </div>
       </s-section>
 
-      {/* Storefront & SEO Extension Connection (Theme Snippet Setup) - Positioned in high-focus near top */}
-      <s-section heading="🌐 Connect Keywords to Live Storefront & SEO Extensions">
+      {/* Comprehensive SEO Score Breakdown */}
+      <s-section heading="🎯 SEO Score Breakdown — All Resources">
         <div
-          id="theme-setup"
           style={{
             background: "#ffffff",
-            borderRadius: "12px",
-            padding: "24px",
-            border: "1.5px solid #86efac",
-            boxShadow: "0 4px 16px rgba(16, 185, 129, 0.08)",
-            transition: "box-shadow 0.3s ease",
+            borderRadius: "14px",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+            overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "16px" }}>
-            <div style={{ flex: 1, minWidth: "280px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span style={{ background: "#dcfce7", color: "#15803d", fontSize: "11px", fontWeight: "800", padding: "3px 8px", borderRadius: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  One-Time Setup
-                </span>
-                <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
-                  ⏱️ Takes only 30 seconds
-                </span>
-              </div>
-              <div style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a" }}>
-                Add 1 Quick Snippet to Output Keywords on Live Product Pages
-              </div>
-              <div style={{ fontSize: "13px", color: "#475569", marginTop: "6px", lineHeight: "1.5" }}>
-                Shopify themes natively output <strong>SEO Title</strong> and <strong>Meta Description</strong> on live store pages. To also output your <strong>Target SEO Keywords</strong> in the HTML <code>&lt;head&gt;</code> so SEO Chrome extensions (like Detailed SEO, SEO Meta in 1-Click) and search engines can read them, copy and paste this snippet once into your theme:
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const snippet = `{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`;
-                navigator.clipboard.writeText(snippet);
-                setCopiedSnippet(true);
-                setTimeout(() => setCopiedSnippet(false), 3000);
-              }}
-              style={{
-                background: copiedSnippet ? "#16a34a" : "#008060",
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "8px",
-                padding: "10px 20px",
-                fontSize: "13px",
-                fontWeight: "700",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
-                transition: "all 0.2s ease",
-              }}
-            >
-              {copiedSnippet ? "✅ Copied to Clipboard!" : "📋 Copy Liquid Snippet"}
-            </button>
-          </div>
-
+          {/* Header row */}
           <div
             style={{
-              background: "#0f172a",
-              color: "#38bdf8",
-              padding: "14px 18px",
-              borderRadius: "8px",
-              fontFamily: "monospace",
-              fontSize: "12px",
-              lineHeight: "1.6",
-              overflowX: "auto",
-              whiteSpace: "pre-wrap",
-              marginBottom: "16px",
-              border: "1px solid #1e293b",
+              background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+              padding: "18px 24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "10px",
             }}
           >
-            {`{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`}
-          </div>
-
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#334155",
-              background: "#f8fafc",
-              padding: "16px 20px",
-              borderRadius: "8px",
-              border: "1px solid #e2e8f0",
-              lineHeight: "1.7",
-            }}
-          >
-            <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a", marginBottom: "8px" }}>
-              📖 Simple Step-by-Step Directions (Takes 30 Seconds):
+            <div>
+              <div style={{ fontSize: "15px", fontWeight: "800", color: "#ffffff" }}>
+                Overall Store SEO Health Score
+              </div>
+              <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>
+                Weighted across Products · Collections · Pages · Blog Articles · Alt Tags
+              </div>
             </div>
-            <ol style={{ margin: 0, paddingLeft: "20px" }}>
-              <li style={{ marginBottom: "6px" }}>
-                In your Shopify Admin left sidebar, click <strong>Online Store</strong> → <strong>Themes</strong>.
-              </li>
-              <li style={{ marginBottom: "6px" }}>
-                Click the <strong>⋯</strong> (three dots) button on your active theme → select <strong>Edit code</strong>.
-              </li>
-              <li style={{ marginBottom: "6px" }}>
-                In the left file list under <strong>Layout</strong>, click to open <strong>layout/theme.liquid</strong>.
-              </li>
-              <li style={{ marginBottom: "6px" }}>
-                Press <code>Ctrl + F</code> (or <code>Cmd + F</code>) and search for <code>&lt;/head&gt;</code> (or <code>&lt;meta name=&quot;description&quot; ...&gt;</code>).
-              </li>
-              <li style={{ marginBottom: "6px" }}>
-                Paste the copied code directly <strong>above</strong> <code>&lt;/head&gt;</code> (or below meta description).
-              </li>
-              <li>
-                Click <strong>Save</strong> in the top-right corner.
-              </li>
-            </ol>
-            <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #e2e8f0", fontSize: "12px", color: "#16a34a", fontWeight: "600" }}>
-              🎉 Done! Open any product page on your store and inspect with your SEO extension — Title, Description, and Keywords will now all appear!
+            <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
+              <span
+                style={{
+                  fontSize: "48px",
+                  fontWeight: "900",
+                  color: globalSeoScore >= 80 ? "#4ade80" : globalSeoScore >= 50 ? "#fbbf24" : "#f87171",
+                  lineHeight: 1,
+                }}
+              >
+                {globalSeoScore}
+              </span>
+              <span style={{ fontSize: "18px", color: "#64748b", fontWeight: "700" }}>/100</span>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", fontSize: "12px", color: "#475569", marginTop: "14px" }}>
-            <span style={{ fontWeight: "600" }}>Tested & verified with:</span>
-            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>🔍 SEO Meta in 1-Click</span>
-            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>⚡ Detailed SEO Extension</span>
-            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>📊 MozBar</span>
-            <span style={{ background: "#f1f5f9", padding: "3px 10px", borderRadius: "4px" }}>🤖 Google Search Console</span>
+          {/* Category rows */}
+          <div style={{ padding: "8px 0" }}>
+            {[
+              {
+                label: "📦 Products",
+                weight: "35 pts",
+                data: seoBreakdown?.products,
+                color: "#0284c7",
+                link: "/app/bulk-optimizer?resource=products",
+              },
+              {
+                label: "📁 Collections",
+                weight: "20 pts",
+                data: seoBreakdown?.collections,
+                color: "#d97706",
+                link: "/app/bulk-optimizer?resource=collections",
+              },
+              {
+                label: "📄 Pages",
+                weight: "20 pts",
+                data: seoBreakdown?.pages,
+                color: "#7c3aed",
+                link: "/app/bulk-optimizer?resource=pages",
+              },
+              {
+                label: "📝 Blog Articles",
+                weight: "15 pts",
+                data: seoBreakdown?.articles,
+                color: "#0e7490",
+                link: "/app/bulk-optimizer?resource=articles",
+              },
+            ].map(({ label, weight, data, color, link }) => {
+              const score = data?.score ?? null;
+              const n = data?.total ?? 0;
+              return (
+                <div
+                  key={label}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "160px 1fr 120px 80px",
+                    alignItems: "center",
+                    gap: "14px",
+                    padding: "14px 24px",
+                    borderBottom: "1px solid #f1f5f9",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{label}</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Weight: {weight}</div>
+                  </div>
+                  <div>
+                    {score !== null ? (
+                      <>
+                        <div style={{ height: "8px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden", marginBottom: "5px" }}>
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${score}%`,
+                              background: score >= 80 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444",
+                              borderRadius: "4px",
+                              transition: "width 0.5s ease",
+                            }}
+                          />
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#64748b" }}>
+                          {n} item{n !== 1 ? "s" : ""} · Title: {data.withTitle}/{n} · Desc: {data.withDesc}/{n} · Keywords: {data.withKw}/{n}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>No items found</div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    {score !== null ? (
+                      <span
+                        style={{
+                          fontSize: "22px",
+                          fontWeight: "900",
+                          color: score >= 80 ? "#16a34a" : score >= 50 ? "#d97706" : "#dc2626",
+                        }}
+                      >
+                        {score}
+                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8" }}>/100</span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Link
+                      to={link}
+                      style={{
+                        background: color,
+                        color: "#ffffff",
+                        padding: "5px 10px",
+                        borderRadius: "6px",
+                        fontWeight: "700",
+                        fontSize: "11px",
+                        textDecoration: "none",
+                        whiteSpace: "nowrap",
+                        display: "inline-block",
+                      }}
+                    >
+                      Fix →
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Alt Tags row */}
+            {(() => {
+              const altData = seoBreakdown?.altTags;
+              const score = altData?.score ?? null;
+              return (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "160px 1fr 120px 80px",
+                    alignItems: "center",
+                    gap: "14px",
+                    padding: "14px 24px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>🖼️ Image Alt Tags</div>
+                    <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Weight: 10 pts</div>
+                  </div>
+                  <div>
+                    {score !== null ? (
+                      <>
+                        <div style={{ height: "8px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden", marginBottom: "5px" }}>
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${score}%`,
+                              background: score >= 80 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444",
+                              borderRadius: "4px",
+                              transition: "width 0.5s ease",
+                            }}
+                          />
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#64748b" }}>
+                          {altData.imagesWithAlt} of {altData.totalImages} product images have alt text
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>No product images found</div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    {score !== null ? (
+                      <span
+                        style={{
+                          fontSize: "22px",
+                          fontWeight: "900",
+                          color: score >= 80 ? "#16a34a" : score >= 50 ? "#d97706" : "#dc2626",
+                        }}
+                      >
+                        {score}
+                        <span style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8" }}>/100</span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Link
+                      to="/app/image-alt-optimizer"
+                      style={{
+                        background: "#059669",
+                        color: "#ffffff",
+                        padding: "5px 10px",
+                        borderRadius: "6px",
+                        fontWeight: "700",
+                        fontSize: "11px",
+                        textDecoration: "none",
+                        whiteSpace: "nowrap",
+                        display: "inline-block",
+                      }}
+                    >
+                      Fix →
+                    </Link>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </s-section>

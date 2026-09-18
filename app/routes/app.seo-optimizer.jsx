@@ -145,7 +145,7 @@ export default function SeoOptimizer() {
   const shopify = useAppBridge();
   const isPageLoading = navigation.state === "loading";
 
-  const [copiedSnippet, setCopiedSnippet] = useState(false);
+
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -1099,80 +1099,6 @@ export default function SeoOptimizer() {
               </s-box>
             )}
 
-            {/* Short Format Theme Snippet Helper Banner */}
-            <div
-              style={{
-                background: "#f0fdf4",
-                border: "1px solid #86efac",
-                borderRadius: "10px",
-                padding: "12px 18px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: "12px",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "20px" }}>🌐</span>
-                <div>
-                  <div style={{ fontSize: "13px", fontWeight: "700", color: "#166534" }}>
-                    Display Keywords in SEO Extensions (Detailed SEO, SEO Meta in 1-Click)
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#15803d", marginTop: "2px" }}>
-                    Shopify themes natively show SEO Title & Description. Add a 1-line snippet to also show Keywords.
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const snippet = `{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}\n  {%- assign seo_kw = product.metafields.seo.keywords.value -%}\n  {%- if seo_kw.first -%}\n    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">\n  {%- else -%}\n    <meta name="keywords" content="{{ seo_kw | strip | escape }}">\n  {%- endif -%}\n{%- endif -%}`;
-                    navigator.clipboard.writeText(snippet);
-                    setCopiedSnippet(true);
-                    if (shopify?.toast) shopify.toast.show("📋 Liquid snippet copied to clipboard!");
-                    setTimeout(() => setCopiedSnippet(false), 3000);
-                  }}
-                  style={{
-                    background: copiedSnippet ? "#16a34a" : "#008060",
-                    color: "#ffffff",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "7px 14px",
-                    fontSize: "12px",
-                    fontWeight: "700",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  {copiedSnippet ? "✅ Copied!" : "📋 Copy Theme Code"}
-                </button>
-                <Link
-                  to="/app#theme-setup"
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "700",
-                    color: "#166534",
-                    background: "#ffffff",
-                    padding: "6px 12px",
-                    borderRadius: "6px",
-                    border: "1px solid #86efac",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <span>📖 View Setup Guide in Dashboard</span>
-                  <span>→</span>
-                </Link>
-              </div>
-            </div>
 
           </s-stack>
         </s-layout-section>
