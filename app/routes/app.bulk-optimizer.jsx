@@ -42,13 +42,18 @@ function parseMetafieldKeywords(rawVal) {
 }
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, scopes } = await authenticate.admin(request);
   const shop = session?.shop || "";
+
+  const url = new URL(request.url);
+
+  // If user requested to grant/update missing scopes
+  if (url.searchParams.get("grant_scopes") === "1" && scopes?.request) {
+    await scopes.request(["write_content"]);
+  }
 
   // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
   await ensureKeywordsMetafieldDefinition(admin, shop);
-
-  const url = new URL(request.url);
   const pageParam = url.searchParams.get("page");
   const cursorParam = url.searchParams.get("cursor");
   const directionParam = url.searchParams.get("direction"); // "next" | "prev"
@@ -340,7 +345,7 @@ export const loader = async ({ request }) => {
                 id
                 title
                 handle
-                summaryHtml
+                summary
                 blog {
                   title
                 }
@@ -359,12 +364,14 @@ export const loader = async ({ request }) => {
       const artData = await artRes.json();
       if (artData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
         contentScopeError = true;
+      } else if (artData?.errors?.length > 0) {
+        console.warn("Articles GraphQL errors:", artData.errors);
       } else {
         articles = (artData?.data?.articles?.edges || []).map((e) => ({
           id: e.node.id,
           title: e.node.title || "Untitled Article",
           handle: e.node.handle || "",
-          summary: e.node.summaryHtml || "",
+          summary: e.node.summary || "",
           blogTitle: e.node.blog?.title || "Blog",
           imageUrl: e.node.image?.url || null,
           seoTitle: e.node.seo?.title || "",
@@ -1674,6 +1681,7 @@ export default function BulkOptimizer() {
           onNotify={setToastMessage}
         />
       )}
+
 
       {/* RESOURCE VIEW: PAGES */}
       {activeResource === "pages" && (

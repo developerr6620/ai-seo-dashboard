@@ -1,16 +1,78 @@
-{%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}
-  {%- assign seo_kw = product.metafields.seo.keywords.value -%}
-  {%- if seo_kw.first -%}
-    <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">
-  {%- else -%}
-    <meta name="keywords" content="{{ seo_kw | strip | escape }}">
+{%- assign is_active = true -%}
+{%- if template.name == 'product' and block.settings.enable_products == false -%}
+  {%- assign is_active = false -%}
+{%- elsif template.name == 'page' and block.settings.enable_pages == false -%}
+  {%- assign is_active = false -%}
+{%- elsif template.name == 'collection' and block.settings.enable_collections == false -%}
+  {%- assign is_active = false -%}
+{%- elsif template.name == 'article' and block.settings.enable_articles == false -%}
+  {%- assign is_active = false -%}
+{%- elsif template.name == 'index' and block.settings.enable_home == false -%}
+  {%- assign is_active = false -%}
+{%- endif -%}
+
+{%- if is_active -%}
+  {%- assign seo_kw = blank -%}
+  {%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}
+    {%- assign seo_kw = product.metafields.seo.keywords.value -%}
+  {%- elsif template.name == 'page' and page.metafields.seo.keywords.value != blank -%}
+    {%- assign seo_kw = page.metafields.seo.keywords.value -%}
+  {%- elsif template.name == 'collection' and collection.metafields.seo.keywords.value != blank -%}
+    {%- assign seo_kw = collection.metafields.seo.keywords.value -%}
+  {%- elsif template.name == 'article' and article.metafields.seo.keywords.value != blank -%}
+    {%- assign seo_kw = article.metafields.seo.keywords.value -%}
+  {%- elsif template.name == 'index' and shop.metafields.seo.keywords.value != blank -%}
+    {%- assign seo_kw = shop.metafields.seo.keywords.value -%}
+  {%- endif -%}
+
+  {%- if seo_kw != blank -%}
+    {%- if seo_kw.first -%}
+      <meta name="keywords" content="{{ seo_kw | join: ', ' | strip | escape }}">
+    {%- else -%}
+      <meta name="keywords" content="{{ seo_kw | strip | escape }}">
+    {%- endif -%}
   {%- endif -%}
 {%- endif -%}
 
 {% schema %}
 {
-  "name": "SEO Keywords Tag",
+  "name": "AI SEO Suite (All-In-One)",
   "target": "head",
-  "settings": []
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "One master toggle to activate SEO keywords & search tags across your entire store (Products, Pages, Collections & Blogs)."
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_products",
+      "label": "Enable on Product Pages",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_pages",
+      "label": "Enable on Online Store Pages",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_collections",
+      "label": "Enable on Collection Pages",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_articles",
+      "label": "Enable on Blog Articles",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_home",
+      "label": "Enable on Homepage",
+      "default": true
+    }
+  ]
 }
 {% endschema %}

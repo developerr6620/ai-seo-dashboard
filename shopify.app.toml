@@ -26,6 +26,24 @@ description = "Comma-separated target search keywords for SEO"
   admin = "merchant_read_write"
   storefront = "public_read"
 
+[page.metafields.seo.keywords]
+type = "multi_line_text_field"
+name = "Target SEO Keywords"
+description = "Comma-separated target search keywords for SEO"
+
+  [page.metafields.seo.keywords.access]
+  admin = "merchant_read_write"
+  storefront = "public_read"
+
+[collection.metafields.seo.keywords]
+type = "multi_line_text_field"
+name = "Target SEO Keywords"
+description = "Comma-separated target search keywords for SEO"
+
+  [collection.metafields.seo.keywords.access]
+  admin = "merchant_read_write"
+  storefront = "public_read"
+
 [metaobjects.app.example]
 name = "Example"
 description = "An example metaobject definition created by this template"

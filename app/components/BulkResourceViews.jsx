@@ -520,6 +520,31 @@ export function BulkPagesView({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
+  const [isCreatingStarter, setIsCreatingStarter] = useState(false);
+
+  const handleCreateStarterPages = async () => {
+    setIsCreatingStarter(true);
+    try {
+      const res = await fetch("/api/create-starter-pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeName }),
+      });
+      const data = await res.json();
+      if (data.success && data.pages?.length > 0) {
+        setPages((prev) => [...data.pages, ...prev]);
+        onNotify?.(`🎉 Successfully created ${data.createdCount} essential store pages in Shopify!`);
+      } else {
+        const errMsg = data.errors?.map((e) => e.error).join(", ") || data.error || "Permission pending or page already exists";
+        onNotify?.(`⚠️ ${errMsg}`);
+      }
+    } catch (err) {
+      console.error("Create starter pages failed:", err);
+      onNotify?.(`⚠️ Error creating pages: ${err.message}`);
+    } finally {
+      setIsCreatingStarter(false);
+    }
+  };
 
   const getTitle = (p) => (drafts[p.id]?.seoTitle !== undefined ? drafts[p.id].seoTitle : p.seoTitle || "");
   const getDesc = (p) => (drafts[p.id]?.seoDescription !== undefined ? drafts[p.id].seoDescription : p.seoDescription || "");
@@ -652,13 +677,33 @@ export function BulkPagesView({
             fontSize: "13px",
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
             gap: "12px",
           }}
         >
-          <span style={{ fontSize: "20px" }}>⚠️</span>
-          <div>
-            <strong>Shopify Content Permission Pending:</strong> To access and save Online Store Pages, please reload the app in your Shopify Admin to accept the newly added <code>write_content</code> permission.
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <div>
+              <strong>Shopify Content Permission Pending:</strong> To access and save Online Store Pages, please grant the <code>write_content</code> permission.
+            </div>
           </div>
+          <a
+            href="/app/grant-content"
+            target="_top"
+            style={{
+              background: "#b45309",
+              color: "#ffffff",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              fontWeight: "700",
+              textDecoration: "none",
+              fontSize: "12px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Grant Permission →
+          </a>
         </div>
       )}
 
@@ -841,8 +886,66 @@ export function BulkPagesView({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
-                  No store pages match your current search/filter.
+                <td colSpan={5} style={{ padding: "44px 24px", textAlign: "center" }}>
+                  {pages.length === 0 ? (
+                    <div style={{ maxWidth: "560px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                      <div style={{ fontSize: "36px" }}>📄</div>
+                      <div style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>
+                        No Content Pages Found in Shopify (0 Pages)
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
+                        In Shopify, <strong>Online Store Pages</strong> are content pages (e.g. <em>About Us</em>, <em>Contact Us</em>, <em>FAQ</em>, <em>Privacy Policy</em>) created under <strong>Shopify Admin → Online Store → Pages</strong>. Theme layouts (like Product, Collection, and Cart templates) are layout files rather than content pages.
+                      </div>
+                      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center", marginTop: "6px" }}>
+                        <button
+                          type="button"
+                          disabled={isCreatingStarter}
+                          onClick={handleCreateStarterPages}
+                          style={{
+                            background: "linear-gradient(135deg, #4338ca 0%, #3730a3 100%)",
+                            color: "#ffffff",
+                            border: "none",
+                            borderRadius: "8px",
+                            padding: "10px 18px",
+                            fontSize: "13px",
+                            fontWeight: "700",
+                            cursor: isCreatingStarter ? "wait" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: "0 2px 8px rgba(67, 56, 202, 0.3)",
+                          }}
+                        >
+                          {isCreatingStarter ? "⏳ Creating Essential Pages..." : "⚡ 1-Click: Create Essential SEO Pages"}
+                        </button>
+                        <a
+                          href="/app/bulk-optimizer?grant_scopes=1"
+                          target="_top"
+                          style={{
+                            background: "#f1f5f9",
+                            color: "#334155",
+                            borderRadius: "8px",
+                            padding: "10px 16px",
+                            fontSize: "13px",
+                            fontWeight: "700",
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          🔑 Refresh Permission
+                        </a>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                        Instantly generates <em>About Us</em>, <em>Contact Us</em>, <em>FAQ</em>, and <em>Privacy Policy</em> with pre-written, high-ranking SEO tags.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                      No store pages match your current search/filter.
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -991,6 +1094,31 @@ export function BulkArticlesView({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
+  const [isCreatingStarter, setIsCreatingStarter] = useState(false);
+
+  const handleCreateStarterArticle = async () => {
+    setIsCreatingStarter(true);
+    try {
+      const res = await fetch("/api/create-starter-pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceType: "article", storeName }),
+      });
+      const data = await res.json();
+      if (data.success && data.articles?.length > 0) {
+        setArticles((prev) => [...data.articles, ...prev]);
+        onNotify?.(`🎉 Successfully created starter blog article in Shopify!`);
+      } else {
+        const errMsg = data.error || "Permission pending or article could not be created";
+        onNotify?.(`⚠️ ${errMsg}`);
+      }
+    } catch (err) {
+      console.error("Create starter article failed:", err);
+      onNotify?.(`⚠️ Error creating article: ${err.message}`);
+    } finally {
+      setIsCreatingStarter(false);
+    }
+  };
 
   const getTitle = (a) => (drafts[a.id]?.seoTitle !== undefined ? drafts[a.id].seoTitle : a.seoTitle || "");
   const getDesc = (a) => (drafts[a.id]?.seoDescription !== undefined ? drafts[a.id].seoDescription : a.seoDescription || "");
@@ -1124,13 +1252,33 @@ export function BulkArticlesView({
             fontSize: "13px",
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
             gap: "12px",
           }}
         >
-          <span style={{ fontSize: "20px" }}>⚠️</span>
-          <div>
-            <strong>Shopify Content Permission Pending:</strong> To access and save Blog Articles, please reload the app in your Shopify Admin to accept the newly added <code>write_content</code> permission.
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <div>
+              <strong>Shopify Content Permission Pending:</strong> To access and save Blog Articles, please grant the <code>write_content</code> permission.
+            </div>
           </div>
+          <a
+            href="/app/grant-content"
+            target="_top"
+            style={{
+              background: "#0e7490",
+              color: "#ffffff",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              fontWeight: "700",
+              textDecoration: "none",
+              fontSize: "12px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Grant Permission →
+          </a>
         </div>
       )}
 
@@ -1313,8 +1461,66 @@ export function BulkArticlesView({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
-                  No blog articles match your current search/filter.
+                <td colSpan={5} style={{ padding: "44px 24px", textAlign: "center" }}>
+                  {articles.length === 0 ? (
+                    <div style={{ maxWidth: "560px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                      <div style={{ fontSize: "36px" }}>📝</div>
+                      <div style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>
+                        No Blog Articles Found in Shopify (0 Posts)
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
+                        In Shopify, <strong>Blog Articles</strong> are editorial posts managed under <strong>Shopify Admin → Online Store → Blog posts</strong>. If your store hasn&apos;t published articles yet, you can create a starter post in 1 click or grant content access.
+                      </div>
+                      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center", marginTop: "6px" }}>
+                        <button
+                          type="button"
+                          disabled={isCreatingStarter}
+                          onClick={handleCreateStarterArticle}
+                          style={{
+                            background: "linear-gradient(135deg, #0e7490 0%, #0369a1 100%)",
+                            color: "#ffffff",
+                            border: "none",
+                            borderRadius: "8px",
+                            padding: "10px 18px",
+                            fontSize: "13px",
+                            fontWeight: "700",
+                            cursor: isCreatingStarter ? "wait" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: "0 2px 8px rgba(14, 116, 144, 0.3)",
+                          }}
+                        >
+                          {isCreatingStarter ? "⏳ Creating Starter Article..." : "⚡ 1-Click: Create Starter SEO Blog Article"}
+                        </button>
+                        <a
+                          href="/app/grant-content"
+                          target="_top"
+                          style={{
+                            background: "#f1f5f9",
+                            color: "#334155",
+                            borderRadius: "8px",
+                            padding: "10px 16px",
+                            fontSize: "13px",
+                            fontWeight: "700",
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          🔑 Refresh Permission
+                        </a>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                        Instantly generates a high-ranking buyer guide article with pre-written SEO metadata and headings.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+                      No blog articles match your current search/filter.
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (
