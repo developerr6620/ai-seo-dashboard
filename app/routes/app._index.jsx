@@ -790,7 +790,7 @@ export default function Dashboard() {
                     textDecoration: "none",
                   }}
                 >
-                  View in Bulk Optimizer →
+                  View in SEO Bulk Optimizer →
                 </Link>
               </div>
             )}
@@ -871,7 +871,7 @@ export default function Dashboard() {
                     textDecoration: "none",
                   }}
                 >
-                  View in Bulk Optimizer →
+                  View in SEO Bulk Optimizer →
                 </Link>
               </div>
             )}
@@ -1125,7 +1125,7 @@ export default function Dashboard() {
             gap: "16px",
           }}
         >
-          {/* 1-Click Bulk Optimizer */}
+          {/* SEO Bulk Optimizer */}
           <Link to="/app/bulk-optimizer" style={{ textDecoration: "none" }}>
             <button
               type="button"
@@ -1144,39 +1144,12 @@ export default function Dashboard() {
               }}
             >
               <div style={{ fontSize: "28px", marginBottom: "10px" }}>🚀</div>
-              <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>1-Click Bulk Optimizer</div>
+              <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>SEO Bulk Optimizer</div>
               <div style={{ fontSize: "13px", opacity: 0.85, lineHeight: "1.4" }}>
-                Batch optimize products at once with live progress and side-by-side review.
+                Batch optimize products, collections, pages & blogs at once with AI.
               </div>
               <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", color: "#34d399" }}>
                 Launch Bulk Tool →
-              </div>
-            </button>
-          </Link>
-
-          {/* Start Single SEO Optimizer */}
-          <Link to="/app/seo-optimizer" style={{ textDecoration: "none" }}>
-            <button
-              type="button"
-              style={{
-                background: "linear-gradient(135deg, #008060, #004c3f)",
-                borderRadius: "12px",
-                padding: "24px",
-                cursor: "pointer",
-                color: "#ffffff",
-                boxShadow: "0 4px 12px rgba(0,128,96,0.3)",
-                border: "none",
-                width: "100%",
-                textAlign: "left",
-              }}
-            >
-              <div style={{ fontSize: "28px", marginBottom: "10px" }}>⚡</div>
-              <div style={{ fontSize: "17px", fontWeight: "700", marginBottom: "6px" }}>Single Optimizer</div>
-              <div style={{ fontSize: "13px", opacity: 0.85 }}>
-                Fine-tune titles & descriptions one-by-one with Google SERP preview.
-              </div>
-              <div style={{ marginTop: "12px", fontSize: "13px", fontWeight: "600", opacity: 0.9 }}>
-                Open Single Tool →
               </div>
             </button>
           </Link>
@@ -1247,7 +1220,7 @@ export default function Dashboard() {
             </div>
             <div style={{ fontSize: "13px", color: "#4a4a4a" }}>
               {missingDescriptions > 0
-                ? `${missingDescriptions.toLocaleString()} products missing meta descriptions. Click SEO Optimizer to fix.`
+                ? `${missingDescriptions.toLocaleString()} products missing meta descriptions. Use the SEO Bulk Optimizer to fix them.`
                 : "All your products have meta descriptions. Great SEO coverage!"}
             </div>
           </div>
@@ -1256,59 +1229,6 @@ export default function Dashboard() {
 
 
 
-      {/* How It Works */}
-      <s-section heading="How It Works">
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "16px",
-          }}
-        >
-          {[
-            { step: "1", icon: "🔍", title: "Search & Select", desc: "Find any product from your store catalog using the live search field." },
-            { step: "2", icon: "🤖", title: "Generate AI SEO", desc: "Choose a tone, add optional keywords, and let AI generate 1 optimized title and meta description instantly." },
-            { step: "3", icon: "✏️", title: "Review & Tweak", desc: "Preview the Google snippet, adjust the text if needed, and confirm the SEO score is green." },
-            { step: "4", icon: "💾", title: "Save to Shopify", desc: "One click publishes your optimized SEO directly to your Shopify product catalog." },
-          ].map((item) => (
-            <div
-              key={item.step}
-              style={{
-                background: "#ffffff",
-                borderRadius: "12px",
-                padding: "20px",
-                border: "1px solid #e1e3e5",
-                textAlign: "center",
-              }}
-            >
-              <div style={{ fontSize: "26px", marginBottom: "10px" }}>{item.icon}</div>
-              <div
-                style={{
-                  background: "#008060",
-                  color: "#ffffff",
-                  borderRadius: "50%",
-                  width: "22px",
-                  height: "22px",
-                  fontSize: "12px",
-                  fontWeight: "800",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: "10px",
-                }}
-              >
-                {item.step}
-              </div>
-              <div style={{ fontSize: "14px", fontWeight: "700", color: "#202223", marginBottom: "6px" }}>
-                {item.title}
-              </div>
-              <div style={{ fontSize: "13px", color: "#616161", lineHeight: "1.5" }}>
-                {item.desc}
-              </div>
-            </div>
-          ))}
-        </div>
-      </s-section>
 
       {/* Page Loading Overlay */}
       {isPageLoading && (
