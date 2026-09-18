@@ -13,16 +13,29 @@
 
 {%- if is_active -%}
   {%- assign seo_kw = blank -%}
-  {%- if template.name == 'product' and product.metafields.seo.keywords.value != blank -%}
-    {%- assign seo_kw = product.metafields.seo.keywords.value -%}
-  {%- elsif template.name == 'page' and page.metafields.seo.keywords.value != blank -%}
-    {%- assign seo_kw = page.metafields.seo.keywords.value -%}
-  {%- elsif template.name == 'collection' and collection.metafields.seo.keywords.value != blank -%}
-    {%- assign seo_kw = collection.metafields.seo.keywords.value -%}
-  {%- elsif template.name == 'article' and article.metafields.seo.keywords.value != blank -%}
-    {%- assign seo_kw = article.metafields.seo.keywords.value -%}
-  {%- elsif template.name == 'index' and shop.metafields.seo.keywords.value != blank -%}
-    {%- assign seo_kw = shop.metafields.seo.keywords.value -%}
+  {%- if template.name == 'product' or template contains 'product' -%}
+    {%- assign seo_kw = product.metafields.seo.keywords.value | default: product.metafields.seo.keywords -%}
+  {%- elsif template.name == 'collection' or template contains 'collection' -%}
+    {%- assign seo_kw = collection.metafields.seo.keywords.value | default: collection.metafields.seo.keywords -%}
+  {%- elsif template.name == 'page' or template contains 'page' -%}
+    {%- assign seo_kw = page.metafields.seo.keywords.value | default: page.metafields.seo.keywords -%}
+  {%- elsif template.name == 'article' or template contains 'article' -%}
+    {%- assign seo_kw = article.metafields.seo.keywords.value | default: article.metafields.seo.keywords -%}
+  {%- elsif template.name == 'index' or template == 'index' -%}
+    {%- assign seo_kw = shop.metafields.seo.keywords.value | default: shop.metafields.seo.keywords -%}
+  {%- endif -%}
+
+  {%- comment -%} Universal fallback if template variable was different {%- endcomment -%}
+  {%- if seo_kw == blank -%}
+    {%- if product != blank and product.metafields.seo.keywords != blank -%}
+      {%- assign seo_kw = product.metafields.seo.keywords.value | default: product.metafields.seo.keywords -%}
+    {%- elsif collection != blank and collection.metafields.seo.keywords != blank -%}
+      {%- assign seo_kw = collection.metafields.seo.keywords.value | default: collection.metafields.seo.keywords -%}
+    {%- elsif page != blank and page.metafields.seo.keywords != blank -%}
+      {%- assign seo_kw = page.metafields.seo.keywords.value | default: page.metafields.seo.keywords -%}
+    {%- elsif article != blank and article.metafields.seo.keywords != blank -%}
+      {%- assign seo_kw = article.metafields.seo.keywords.value | default: article.metafields.seo.keywords -%}
+    {%- endif -%}
   {%- endif -%}
 
   {%- if seo_kw != blank -%}

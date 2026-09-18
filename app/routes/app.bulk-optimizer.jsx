@@ -265,6 +265,9 @@ export const loader = async ({ request }) => {
                   title
                   description
                 }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
           }
@@ -279,6 +282,7 @@ export const loader = async ({ request }) => {
         imageUrl: e.node.image?.url || null,
         seoTitle: e.node.seo?.title || "",
         seoDescription: e.node.seo?.description || "",
+        keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
         hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
       }));
     } catch (colErr) {
@@ -307,6 +311,9 @@ export const loader = async ({ request }) => {
                 seoDesc: metafield(namespace: "global", key: "description_tag") {
                   value
                 }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
           }
@@ -326,6 +333,7 @@ export const loader = async ({ request }) => {
           bodySummary: e.node.bodySummary || "",
           seoTitle: e.node.seoTitle?.value || "",
           seoDescription: e.node.seoDesc?.value || "",
+          keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
           hasCustomSeoTitle: Boolean(e.node.seoTitle?.value?.trim()),
         }));
       }
@@ -360,6 +368,9 @@ export const loader = async ({ request }) => {
                 seoDesc: metafield(namespace: "global", key: "description_tag") {
                   value
                 }
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
               }
             }
           }
@@ -381,6 +392,7 @@ export const loader = async ({ request }) => {
           imageUrl: e.node.image?.url || null,
           seoTitle: e.node.seoTitle?.value || "",
           seoDescription: e.node.seoDesc?.value || "",
+          keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
           hasCustomSeoTitle: Boolean(e.node.seoTitle?.value?.trim()),
         }));
       }

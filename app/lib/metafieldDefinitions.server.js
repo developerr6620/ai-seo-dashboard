@@ -51,8 +51,69 @@ export async function ensureKeywordsMetafieldDefinition(admin, shop = "", force 
       (e) => e.node?.name === "Target SEO Keywords" && !(e.node?.namespace === "seo" && e.node?.key === "keywords")
     )?.node;
 
+async function ensureDefinitionForType(admin, ownerType) {
+  try {
+    const checkQuery = `#graphql
+      query GetDefinitions($ownerType: MetafieldOwnerType!) {
+        metafieldDefinitions(first: 50, ownerType: $ownerType) {
+          edges {
+            node {
+              id
+              name
+              namespace
+              key
+              type { name }
+            }
+          }
+        }
+      }
+    `;
+    const checkRes = await admin.graphql(checkQuery, { variables: { ownerType } });
+    const checkJson = await checkRes.json();
+    const edges = checkJson?.data?.metafieldDefinitions?.edges || [];
+    const exists = edges.find((e) => e.node?.namespace === "seo" && e.node?.key === "keywords");
+    if (exists) return { success: true, id: exists.node?.id };
+
+    const createMutation = `#graphql
+      mutation CreateDef($definition: MetafieldDefinitionInput!) {
+        metafieldDefinitionCreate(definition: $definition) {
+          createdDefinition { id }
+          userErrors { message }
+        }
+      }
+    `;
+    await admin.graphql(createMutation, {
+      variables: {
+        definition: {
+          name: "Target SEO Keywords",
+          namespace: "seo",
+          key: "keywords",
+          description: "Comma-separated target search keywords for SEO",
+          ownerType,
+          type: "multi_line_text_field",
+          pin: true,
+          access: {
+            storefront: "PUBLIC_READ",
+          },
+        },
+      },
+    });
+    return { success: true };
+  } catch (err) {
+    console.warn(`[MetafieldDefinition] Non-fatal definition error for ${ownerType}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+async function ensureAllResourceDefinitions(admin) {
+  for (const t of ["COLLECTION", "PAGE", "ARTICLE"]) {
+    await ensureDefinitionForType(admin, t);
+  }
+}
+
     // If seo.keywords already exists and is multi_line_text_field, we are golden!
     if (existingSeo && existingSeo.type?.name === "multi_line_text_field") {
+      await ensureAllResourceDefinitions(admin);
       if (shop) verifiedShops.add(shop);
       return { success: true, alreadyExisted: true, id: existingSeo.id, type: "multi_line_text_field" };
     }
@@ -211,6 +272,7 @@ export async function ensureKeywordsMetafieldDefinition(admin, shop = "", force 
 
     const created = json?.data?.metafieldDefinitionCreate?.createdDefinition;
     console.log("[MetafieldDefinition] Successfully created multi_line_text_field definition:", created);
+    await ensureAllResourceDefinitions(admin);
     if (shop) verifiedShops.add(shop);
     return { success: true, created, type: "multi_line_text_field" };
   } catch (err) {
