@@ -100,10 +100,28 @@ export function generateSeoTitle({
   const candidates = [];
   if (name.length <= TITLE_MAX) candidates.push(name);
 
+  // If name has a hyphen or separator like " - ", offer a clean pipe format " | "
+  if (name.includes(" - ")) {
+    const parts = name.split(" - ");
+    if (parts.length === 2 && parts[0] && parts[1]) {
+      const piped = `${parts[0].trim()} | ${parts[1].trim()}`;
+      if (piped.length <= TITLE_MAX) candidates.push(piped);
+    }
+  }
+
   if (kw) {
     candidates.push(`${name} | ${kw}`);
     candidates.push(`${kw} | ${name}`);
     candidates.push(`${name} - ${kw}`);
+
+    // If full name + kw exceeds 50 chars, fit a shortened name + kw
+    const room = TITLE_MAX - kw.length - 3;
+    if (room >= 12) {
+      const shortened = wordsFit(name, room);
+      if (shortened && shortened.length >= 10 && shortened !== name) {
+        candidates.push(`${shortened} | ${kw}`);
+      }
+    }
   }
 
   if (family === "luxury") {
@@ -124,7 +142,9 @@ export function generateSeoTitle({
   if (fitting.length) {
     fitting.sort((a, b) => {
       const kwScore = (c) => (kw && c.toLowerCase().includes(kw.toLowerCase()) ? 30 : 0);
-      return kwScore(b) + b.length - (kwScore(a) + a.length);
+      // Prefer titles distinct from the default product title so Shopify's API stores a genuine custom SEO title
+      const distinctScore = (c) => (c.toLowerCase() !== name.toLowerCase() ? 25 : 0);
+      return (kwScore(b) + distinctScore(b) + b.length) - (kwScore(a) + distinctScore(a) + a.length);
     });
     return fitting[variant % fitting.length];
   }

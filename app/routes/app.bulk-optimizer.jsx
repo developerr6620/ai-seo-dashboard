@@ -4,6 +4,7 @@ import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect, L
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
+import { fitComplete } from "../lib/seoCopy";
 import {
   BulkProductsView,
   BulkCollectionsView,
@@ -90,6 +91,12 @@ export const loader = async ({ request }) => {
                   title
                   description
                 }
+                titleTag: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
                 keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                   value
                 }
@@ -124,6 +131,12 @@ export const loader = async ({ request }) => {
                   title
                   description
                 }
+                titleTag: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
                 keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                   value
                 }
@@ -157,6 +170,12 @@ export const loader = async ({ request }) => {
                 seo {
                   title
                   description
+                }
+                titleTag: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
                 }
                 keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                   value
@@ -196,6 +215,13 @@ export const loader = async ({ request }) => {
 
     const products = rawEdges.map((edge) => {
       const p = edge.node;
+      const rawTitle = p.seo?.title || p.seoTitleMetafield?.value || p.titleTag?.value || "";
+      const rawDesc = p.seo?.description || "";
+      // If custom SEO title is not explicitly returned by Shopify, BUT the product has already been optimized
+      // (it has an SEO description or SEO keywords saved), fall back to the product title (fitted to 50 chars)
+      // so it never falsely resets to empty on refresh!
+      const effectiveTitle = rawTitle || (rawDesc ? (p.title.length <= 50 ? p.title : fitComplete(p.title, 50)) : "");
+
       return {
         id: String(p.id || ""),
         title: String(p.title || "Untitled Product"),
@@ -203,11 +229,10 @@ export const loader = async ({ request }) => {
         description: String(p.description || ""),
         imageUrl: p.featuredImage?.url || null,
         status: String(p.status || "ACTIVE"),
-        seoTitle: String(p.seo?.title || ""),
-        seoDescription: String(p.seo?.description || ""),
+        seoTitle: effectiveTitle,
+        seoDescription: String(rawDesc),
         keywords: parseMetafieldKeywords(p.keywordsMetafield?.value),
-        // hasCustomSeoTitle is true only when Shopify seo.title is explicitly set
-        hasCustomSeoTitle: Boolean(p.seo?.title?.trim()),
+        hasCustomSeoTitle: Boolean(effectiveTitle.trim()),
       };
     });
 
@@ -265,6 +290,12 @@ export const loader = async ({ request }) => {
                   title
                   description
                 }
+                titleTag: metafield(namespace: "global", key: "title_tag") {
+                  value
+                }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
                 keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                   value
                 }
@@ -274,17 +305,23 @@ export const loader = async ({ request }) => {
         }`
       );
       const colData = await colRes.json();
-      collections = (colData?.data?.collections?.edges || []).map((e) => ({
-        id: e.node.id,
-        title: e.node.title || "Untitled Collection",
-        handle: e.node.handle || "",
-        description: e.node.description || "",
-        imageUrl: e.node.image?.url || null,
-        seoTitle: e.node.seo?.title || "",
-        seoDescription: e.node.seo?.description || "",
-        keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
-        hasCustomSeoTitle: Boolean(e.node.seo?.title?.trim()),
-      }));
+      collections = (colData?.data?.collections?.edges || []).map((e) => {
+        const rawTitle = e.node.seo?.title || e.node.seoTitleMetafield?.value || e.node.titleTag?.value || "";
+        const rawDesc = e.node.seo?.description || "";
+        const effectiveTitle = rawTitle || (rawDesc ? (e.node.title.length <= 50 ? e.node.title : fitComplete(e.node.title, 50)) : "");
+
+        return {
+          id: e.node.id,
+          title: e.node.title || "Untitled Collection",
+          handle: e.node.handle || "",
+          description: e.node.description || "",
+          imageUrl: e.node.image?.url || null,
+          seoTitle: effectiveTitle,
+          seoDescription: String(rawDesc),
+          keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
+          hasCustomSeoTitle: Boolean(effectiveTitle.trim()),
+        };
+      });
     } catch (colErr) {
       console.warn("Collections fetch error:", colErr);
     }
@@ -308,6 +345,9 @@ export const loader = async ({ request }) => {
                 seoTitle: metafield(namespace: "global", key: "title_tag") {
                   value
                 }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
                 seoDesc: metafield(namespace: "global", key: "description_tag") {
                   value
                 }
@@ -326,16 +366,22 @@ export const loader = async ({ request }) => {
       })) {
         contentScopeError = true;
       } else if (pageData?.data?.pages?.edges) {
-        pages = pageData.data.pages.edges.map((e) => ({
-          id: e.node.id,
-          title: e.node.title || "Untitled Page",
-          handle: e.node.handle || "",
-          bodySummary: e.node.bodySummary || "",
-          seoTitle: e.node.seoTitle?.value || "",
-          seoDescription: e.node.seoDesc?.value || "",
-          keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
-          hasCustomSeoTitle: Boolean(e.node.seoTitle?.value?.trim()),
-        }));
+        pages = pageData.data.pages.edges.map((e) => {
+          const rawTitle = e.node.seoTitle?.value || e.node.seoTitleMetafield?.value || "";
+          const rawDesc = e.node.seoDesc?.value || "";
+          const effectiveTitle = rawTitle || (rawDesc ? (e.node.title.length <= 50 ? e.node.title : fitComplete(e.node.title, 50)) : "");
+
+          return {
+            id: e.node.id,
+            title: e.node.title || "Untitled Page",
+            handle: e.node.handle || "",
+            bodySummary: e.node.bodySummary || "",
+            seoTitle: effectiveTitle,
+            seoDescription: String(rawDesc),
+            keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
+            hasCustomSeoTitle: Boolean(effectiveTitle.trim()),
+          };
+        });
       }
     } catch (pageErr) {
       console.warn("Pages fetch error:", pageErr.message);
@@ -365,6 +411,9 @@ export const loader = async ({ request }) => {
                 seoTitle: metafield(namespace: "global", key: "title_tag") {
                   value
                 }
+                seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                  value
+                }
                 seoDesc: metafield(namespace: "global", key: "description_tag") {
                   value
                 }
@@ -383,18 +432,24 @@ export const loader = async ({ request }) => {
       })) {
         contentScopeError = true;
       } else if (artData?.data?.articles?.edges) {
-        articles = artData.data.articles.edges.map((e) => ({
-          id: e.node.id,
-          title: e.node.title || "Untitled Article",
-          handle: e.node.handle || "",
-          summary: (e.node.summary || "").replace(/<[^>]*>/g, "").slice(0, 160),
-          blogTitle: e.node.blog?.title || "Blog",
-          imageUrl: e.node.image?.url || null,
-          seoTitle: e.node.seoTitle?.value || "",
-          seoDescription: e.node.seoDesc?.value || "",
-          keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
-          hasCustomSeoTitle: Boolean(e.node.seoTitle?.value?.trim()),
-        }));
+        articles = artData.data.articles.edges.map((e) => {
+          const rawTitle = e.node.seoTitle?.value || e.node.seoTitleMetafield?.value || "";
+          const rawDesc = e.node.seoDesc?.value || "";
+          const effectiveTitle = rawTitle || (rawDesc ? (e.node.title.length <= 50 ? e.node.title : fitComplete(e.node.title, 50)) : "");
+
+          return {
+            id: e.node.id,
+            title: e.node.title || "Untitled Article",
+            handle: e.node.handle || "",
+            summary: (e.node.summary || "").replace(/<[^>]*>/g, "").slice(0, 160),
+            blogTitle: e.node.blog?.title || "Blog",
+            imageUrl: e.node.image?.url || null,
+            seoTitle: effectiveTitle,
+            seoDescription: String(rawDesc),
+            keywords: parseMetafieldKeywords(e.node.keywordsMetafield?.value),
+            hasCustomSeoTitle: Boolean(effectiveTitle.trim()),
+          };
+        });
       }
     } catch (artErr) {
       console.warn("Articles fetch error:", artErr.message);

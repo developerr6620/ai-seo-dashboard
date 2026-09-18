@@ -165,36 +165,51 @@ export const action = async ({ request }) => {
             errors.push({ id: colId, error: userErrors.map((e) => e.message).join(", ") });
           } else {
             successCount++;
+            const colMetafields = [
+              {
+                ownerId: colId,
+                namespace: "seo",
+                key: "title",
+                type: "single_line_text_field",
+                value: limited.title,
+              },
+              {
+                ownerId: colId,
+                namespace: "global",
+                key: "title_tag",
+                type: "string",
+                value: limited.title,
+              },
+            ];
             if (item.keywords) {
               const kwList = formatKeywords(item.keywords);
               if (kwList.length > 0) {
-                try {
-                  await admin.graphql(
-                    `#graphql
-                    mutation saveColKeywords($metafields: [MetafieldsSetInput!]!) {
-                      metafieldsSet(metafields: $metafields) {
-                        metafields { id }
-                        userErrors { message }
-                      }
-                    }`,
-                    {
-                      variables: {
-                        metafields: [
-                          {
-                            ownerId: colId,
-                            namespace: "seo",
-                            key: "keywords",
-                            type: "multi_line_text_field",
-                            value: kwList.join(", "),
-                          },
-                        ],
-                      },
-                    }
-                  );
-                } catch (kwErr) {
-                  console.warn("Collection keywords save error:", kwErr.message);
-                }
+                colMetafields.push({
+                  ownerId: colId,
+                  namespace: "seo",
+                  key: "keywords",
+                  type: "multi_line_text_field",
+                  value: kwList.join(", "),
+                });
               }
+            }
+            try {
+              await admin.graphql(
+                `#graphql
+                mutation saveColKeywords($metafields: [MetafieldsSetInput!]!) {
+                  metafieldsSet(metafields: $metafields) {
+                    metafields { id }
+                    userErrors { message }
+                  }
+                }`,
+                {
+                  variables: {
+                    metafields: colMetafields,
+                  },
+                }
+              );
+            } catch (kErr) {
+              console.warn("Collection metafields save warning:", kErr);
             }
           }
         } catch (err) {
@@ -452,7 +467,44 @@ export const action = async ({ request }) => {
 
           successCount++;
 
-          // 2. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
+          // 2. Save SEO Title to metafields for bulletproof persistence against Shopify title resets
+          try {
+            await admin.graphql(
+              `#graphql
+              mutation saveProductSeoMetafields($metafields: [MetafieldsSetInput!]!) {
+                metafieldsSet(metafields: $metafields) {
+                  userErrors {
+                    field
+                    message
+                  }
+                }
+              }`,
+              {
+                variables: {
+                  metafields: [
+                    {
+                      ownerId: prodId,
+                      namespace: "seo",
+                      key: "title",
+                      type: "single_line_text_field",
+                      value: limited.title,
+                    },
+                    {
+                      ownerId: prodId,
+                      namespace: "global",
+                      key: "title_tag",
+                      type: "string",
+                      value: limited.title,
+                    },
+                  ],
+                },
+              }
+            );
+          } catch (mErr) {
+            console.warn(`[SaveSeo] Product title metafields set warning for ${prodId}:`, mErr.message);
+          }
+
+          // 3. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
           const keywordsList = formatKeywords(item.keywords);
           if (keywordsList.length > 0) {
             const commaSeparatedKeywords = keywordsList.join(", ");
@@ -564,7 +616,44 @@ export const action = async ({ request }) => {
       });
     }
 
-    // 2. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
+    // 2. Save SEO Title to metafields for bulletproof persistence
+    try {
+      await admin.graphql(
+        `#graphql
+        mutation saveProductSeoMetafields($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            userErrors {
+              field
+              message
+            }
+          }
+        }`,
+        {
+          variables: {
+            metafields: [
+              {
+                ownerId: productId,
+                namespace: "seo",
+                key: "title",
+                type: "single_line_text_field",
+                value: limited.title,
+              },
+              {
+                ownerId: productId,
+                namespace: "global",
+                key: "title_tag",
+                type: "string",
+                value: limited.title,
+              },
+            ],
+          },
+        }
+      );
+    } catch (mErr) {
+      console.warn(`[SaveSeo] Product title metafields set warning for ${productId}:`, mErr.message);
+    }
+
+    // 3. Save Target SEO Keywords as Product Metafield (comma-separated multiline text)
     let hasKeywords = false;
     let keywordsError = null;
     const keywordsList = formatKeywords(keywords);
