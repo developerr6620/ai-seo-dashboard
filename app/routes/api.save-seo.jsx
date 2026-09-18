@@ -344,7 +344,8 @@ export const action = async ({ request }) => {
       const errors = [];
 
       for (const item of items) {
-        if (!item.productId || !item.seoTitle) continue;
+        const prodId = item.productId || item.id;
+        if (!prodId || !item.seoTitle) continue;
         const limited = enforceSeoLimits({
           title: item.seoTitle,
           description: item.seoDescription || "",
@@ -373,7 +374,7 @@ export const action = async ({ request }) => {
             {
               variables: {
                 input: {
-                  id: item.productId,
+                  id: prodId,
                   seo: {
                     title: limited.title,
                     description: limited.description,
@@ -387,7 +388,7 @@ export const action = async ({ request }) => {
           const userErrors = resJson?.data?.productUpdate?.userErrors || [];
           if (userErrors.length > 0) {
             errors.push({
-              productId: item.productId,
+              productId: prodId,
               field: "seo",
               error: userErrors.map((e) => e.message).join(", "),
             });
@@ -403,7 +404,7 @@ export const action = async ({ request }) => {
             try {
               const metaResult = await saveProductKeywordsMetafield(
                 admin,
-                item.productId,
+                prodId,
                 commaSeparatedKeywords,
                 shop
               );
@@ -412,24 +413,23 @@ export const action = async ({ request }) => {
                 keywordsUpdatedCount++;
               } else {
                 errors.push({
-                  productId: item.productId,
+                  productId: prodId,
                   field: "keywords",
-                  error: `Keywords not saved: ${metaResult.error}`,
+                  error: metaResult.error,
                 });
               }
-            } catch (metaErr) {
-              console.warn(`Could not save keywords metafield for ${item.productId}:`, metaErr.message);
+            } catch (kErr) {
               errors.push({
-                productId: item.productId,
+                productId: prodId,
                 field: "keywords",
-                error: `Keywords error: ${metaErr.message}`,
+                error: kErr.message,
               });
             }
           }
-        } catch (e) {
+        } catch (err) {
           errors.push({
-            productId: item.productId,
-            error: e.message || "Failed to update",
+            productId: prodId,
+            error: err.message,
           });
         }
       }
