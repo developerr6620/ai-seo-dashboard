@@ -165,6 +165,37 @@ export const action = async ({ request }) => {
             errors.push({ id: colId, error: userErrors.map((e) => e.message).join(", ") });
           } else {
             successCount++;
+            if (item.keywords) {
+              const kwList = formatKeywords(item.keywords);
+              if (kwList.length > 0) {
+                try {
+                  await admin.graphql(
+                    `#graphql
+                    mutation saveColKeywords($metafields: [MetafieldsSetInput!]!) {
+                      metafieldsSet(metafields: $metafields) {
+                        metafields { id }
+                        userErrors { message }
+                      }
+                    }`,
+                    {
+                      variables: {
+                        metafields: [
+                          {
+                            ownerId: colId,
+                            namespace: "seo",
+                            key: "keywords",
+                            type: "multi_line_text_field",
+                            value: kwList.join(", "),
+                          },
+                        ],
+                      },
+                    }
+                  );
+                } catch (kwErr) {
+                  console.warn("Collection keywords save error:", kwErr.message);
+                }
+              }
+            }
           }
         } catch (err) {
           errors.push({ id: colId, error: err.message });
@@ -215,6 +246,18 @@ export const action = async ({ request }) => {
               type: "string",
               value: limited.description,
             });
+          }
+          if (item.keywords) {
+            const kwList = formatKeywords(item.keywords);
+            if (kwList.length > 0) {
+              metafields.push({
+                ownerId: pageId,
+                namespace: "seo",
+                key: "keywords",
+                type: "multi_line_text_field",
+                value: kwList.join(", "),
+              });
+            }
           }
 
           const res = await admin.graphql(
@@ -292,6 +335,18 @@ export const action = async ({ request }) => {
               type: "string",
               value: limited.description,
             });
+          }
+          if (item.keywords) {
+            const kwList = formatKeywords(item.keywords);
+            if (kwList.length > 0) {
+              metafields.push({
+                ownerId: artId,
+                namespace: "seo",
+                key: "keywords",
+                type: "multi_line_text_field",
+                value: kwList.join(", "),
+              });
+            }
           }
 
           const res = await admin.graphql(
