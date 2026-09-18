@@ -431,7 +431,7 @@ export default function BulkOptimizer() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const navigation = useNavigation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const shop = loaderData?.shop || { name: "Your Store" };
   const shopDomain = loaderData?.shopDomain || "develops-test-store.myshopify.com";
@@ -442,7 +442,26 @@ export default function BulkOptimizer() {
   const contentScopeError = loaderData?.contentScopeError || false;
 
   // Resource Switcher: "products" | "collections" | "pages" | "articles"
-  const [activeResource, setActiveResource] = useState("products");
+  const resFromQuery = searchParams.get("resource");
+  const [activeResource, setActiveResource] = useState(
+    resFromQuery && ["products", "collections", "pages", "articles"].includes(resFromQuery)
+      ? resFromQuery
+      : "products"
+  );
+
+  useEffect(() => {
+    const res = searchParams.get("resource");
+    if (res && ["products", "collections", "pages", "articles"].includes(res) && res !== activeResource) {
+      setActiveResource(res);
+    }
+  }, [searchParams]);
+
+  const handleSelectResource = (resKey) => {
+    setActiveResource(resKey);
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("resource", resKey);
+    setSearchParams(newParams, { replace: true });
+  };
 
   const products = useMemo(() => loaderData?.products || [], [loaderData?.products]);
   const pagination = loaderData?.pagination || {
@@ -850,7 +869,7 @@ export default function BulkOptimizer() {
       >
         <button
           type="button"
-          onClick={() => setActiveResource("products")}
+          onClick={() => handleSelectResource("products")}
           style={{
             flex: "1 1 180px",
             padding: "10px 16px",
@@ -874,7 +893,7 @@ export default function BulkOptimizer() {
 
         <button
           type="button"
-          onClick={() => setActiveResource("collections")}
+          onClick={() => handleSelectResource("collections")}
           style={{
             flex: "1 1 180px",
             padding: "10px 16px",
@@ -898,7 +917,7 @@ export default function BulkOptimizer() {
 
         <button
           type="button"
-          onClick={() => setActiveResource("pages")}
+          onClick={() => handleSelectResource("pages")}
           style={{
             flex: "1 1 180px",
             padding: "10px 16px",
@@ -922,7 +941,7 @@ export default function BulkOptimizer() {
 
         <button
           type="button"
-          onClick={() => setActiveResource("articles")}
+          onClick={() => handleSelectResource("articles")}
           style={{
             flex: "1 1 180px",
             padding: "10px 16px",

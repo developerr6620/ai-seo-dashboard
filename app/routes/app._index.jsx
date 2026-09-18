@@ -56,6 +56,61 @@ export const loader = async ({ request }) => {
     const currentShop = shopName || shop.myshopifyDomain || "default-store";
     const auditResult = await getStoreAuditStats(admin, currentShop, totalProducts, sampleProducts);
 
+    // 3. Fetch collections, pages, and blog articles counts
+    let collectionsCount = 0;
+    try {
+      const colRes = await admin.graphql(`
+        query getCollectionsCount {
+          collections(first: 100) {
+            edges { node { id } }
+          }
+        }
+      `);
+      const colData = await colRes.json();
+      collectionsCount = colData?.data?.collections?.edges?.length || 0;
+    } catch (e) {
+      console.warn("Collections count error:", e);
+    }
+
+    let pagesCount = 0;
+    let articlesCount = 0;
+    let contentScopeError = false;
+    try {
+      const pRes = await admin.graphql(`
+        query getPagesCount {
+          pages(first: 100) {
+            edges { node { id } }
+          }
+        }
+      `);
+      const pData = await pRes.json();
+      if (pData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+        contentScopeError = true;
+      } else {
+        pagesCount = pData?.data?.pages?.edges?.length || 0;
+      }
+    } catch (e) {
+      contentScopeError = true;
+    }
+
+    try {
+      const aRes = await admin.graphql(`
+        query getArticlesCount {
+          articles(first: 100) {
+            edges { node { id } }
+          }
+        }
+      `);
+      const aData = await aRes.json();
+      if (aData?.errors?.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"))) {
+        contentScopeError = true;
+      } else {
+        articlesCount = aData?.data?.articles?.edges?.length || 0;
+      }
+    } catch (e) {
+      contentScopeError = true;
+    }
+
     return {
       shop: {
         name: shop.name || "Your Store",
@@ -67,6 +122,12 @@ export const loader = async ({ request }) => {
       isAuditing: auditResult.isAuditing,
       lastAuditedAt: auditResult.lastAuditedAt,
       allProductsCount: totalProducts,
+      collectionsCount,
+      pagesCount,
+      articlesCount,
+      contentScopeError,
+      shopDomain: shop.myshopifyDomain || shopName,
+      clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
     };
   } catch (error) {
     console.error("Dashboard loader error:", error);
@@ -87,12 +148,30 @@ export const loader = async ({ request }) => {
       isAuditing: false,
       lastAuditedAt: null,
       allProductsCount: 0,
+      collectionsCount: 0,
+      pagesCount: 0,
+      articlesCount: 0,
+      contentScopeError: false,
+      shopDomain: "",
+      clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
     };
   }
 };
 
 export default function Dashboard() {
-  const { shop, stats: initialStats, allProductsCount, isAuditing: initialIsAuditing, lastAuditedAt: initialLastAudit } = useLoaderData();
+  const {
+    shop,
+    stats: initialStats,
+    allProductsCount,
+    collectionsCount = 0,
+    pagesCount: initialPagesCount = 0,
+    articlesCount: initialArticlesCount = 0,
+    contentScopeError = false,
+    shopDomain = "",
+    clientId = "cdeb2fd429e5b0cceb3d43906b7f2148",
+    isAuditing: initialIsAuditing,
+    lastAuditedAt: initialLastAudit,
+  } = useLoaderData();
   const navigation = useNavigation();
   const isPageLoading = navigation.state === "loading";
 
@@ -101,6 +180,60 @@ export default function Dashboard() {
   const [isAuditing, setIsAuditing] = useState(initialIsAuditing);
   const [lastAudit, setLastAudit] = useState(initialLastAudit);
   const [isTriggering, setIsTriggering] = useState(false);
+
+  const [pagesCount, setPagesCount] = useState(initialPagesCount);
+  const [articlesCount, setArticlesCount] = useState(initialArticlesCount);
+  const [isCreatingPages, setIsCreatingPages] = useState(false);
+  const [isCreatingArticle, setIsCreatingArticle] = useState(false);
+  const [dashToast, setDashToast] = useState(null);
+
+  const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
+
+  const handleCreateStarterPages = async () => {
+    setIsCreatingPages(true);
+    try {
+      const res = await fetch("/api/create-starter-pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeName: shop.name }),
+      });
+      const data = await res.json();
+      if (data.success && data.pages?.length > 0) {
+        setPagesCount((prev) => prev + data.pages.length);
+        setDashToast(`🎉 Successfully created ${data.pages.length} essential SEO pages in Shopify!`);
+      } else {
+        setDashToast(`⚠️ ${data.error || "Could not create pages"}`);
+      }
+    } catch (err) {
+      setDashToast(`⚠️ Error: ${err.message}`);
+    } finally {
+      setIsCreatingPages(false);
+      setTimeout(() => setDashToast(null), 5000);
+    }
+  };
+
+  const handleCreateStarterArticle = async () => {
+    setIsCreatingArticle(true);
+    try {
+      const res = await fetch("/api/create-starter-pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceType: "article", storeName: shop.name }),
+      });
+      const data = await res.json();
+      if (data.success && data.articles?.length > 0) {
+        setArticlesCount((prev) => prev + data.articles.length);
+        setDashToast(`🎉 Successfully created starter blog article in Shopify!`);
+      } else {
+        setDashToast(`⚠️ ${data.error || "Could not create article"}`);
+      }
+    } catch (err) {
+      setDashToast(`⚠️ Error: ${err.message}`);
+    } finally {
+      setIsCreatingArticle(false);
+      setTimeout(() => setDashToast(null), 5000);
+    }
+  };
 
   // Poll for audit completion if background scan is in progress
   useEffect(() => {
@@ -320,6 +453,349 @@ export default function Dashboard() {
             <div style={{ fontSize: "11px", marginTop: "4px", opacity: 0.8 }}>
               Based on all {totalCatalog.toLocaleString()} catalog products
             </div>
+          </div>
+        </div>
+      </s-section>
+
+      {/* Scope Warning Banner if write_content is pending */}
+      {contentScopeError && (
+        <s-section>
+          <div
+            style={{
+              background: "#fffbeb",
+              border: "1.5px solid #fde68a",
+              borderRadius: "12px",
+              padding: "18px 22px",
+              color: "#92400e",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "14px",
+              boxShadow: "0 2px 8px rgba(251, 191, 36, 0.2)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span style={{ fontSize: "26px" }}>⚠️</span>
+              <div>
+                <div style={{ fontWeight: "800", fontSize: "15px", color: "#78350f" }}>
+                  Action Required: Shopify Content Permission Pending
+                </div>
+                <div style={{ marginTop: "2px", color: "#92400e", fontSize: "13px" }}>
+                  To access, audit, and optimize Online Store Pages and Blog Articles, please grant the updated content permission in Shopify.
+                </div>
+              </div>
+            </div>
+            <a
+              href={reauthUrl}
+              target="_top"
+              style={{
+                background: "linear-gradient(135deg, #b45309 0%, #92400e 100%)",
+                color: "#ffffff",
+                padding: "10px 20px",
+                borderRadius: "8px",
+                fontWeight: "700",
+                textDecoration: "none",
+                fontSize: "13px",
+                whiteSpace: "nowrap",
+                boxShadow: "0 2px 8px rgba(180, 83, 9, 0.35)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              🔑 Grant Permission in Shopify →
+            </a>
+          </div>
+        </s-section>
+      )}
+
+      {/* Toast Notification */}
+      {dashToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            background: "#1e293b",
+            color: "#ffffff",
+            padding: "14px 22px",
+            borderRadius: "10px",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+            zIndex: 9999,
+            fontSize: "14px",
+            fontWeight: "600",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <span>{dashToast}</span>
+        </div>
+      )}
+
+      {/* Multi-Resource Hub */}
+      <s-section heading="🚀 Storewide SEO Catalog Hub">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "16px",
+          }}
+        >
+          {/* Products */}
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "12px",
+              padding: "20px",
+              border: "1px solid #e1e3e5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: "14px",
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "28px" }}>📦</span>
+                <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
+                  PRODUCTS
+                </span>
+              </div>
+              <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "8px" }}>
+                {totalCatalog.toLocaleString()}
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+                Store Catalog Products
+              </div>
+            </div>
+            <Link
+              to="/app/bulk-optimizer?resource=products"
+              style={{
+                background: "#f1f5f9",
+                color: "#0f172a",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                fontWeight: "700",
+                fontSize: "12px",
+                textDecoration: "none",
+                textAlign: "center",
+                display: "block",
+              }}
+            >
+              ⚡ Bulk Optimize Products →
+            </Link>
+          </div>
+
+          {/* Collections */}
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "12px",
+              padding: "20px",
+              border: "1px solid #e1e3e5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: "14px",
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "28px" }}>📁</span>
+                <span style={{ background: "#fef3c7", color: "#92400e", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
+                  COLLECTIONS
+                </span>
+              </div>
+              <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "8px" }}>
+                {collectionsCount.toLocaleString()}
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+                Category Collections
+              </div>
+            </div>
+            <Link
+              to="/app/bulk-optimizer?resource=collections"
+              style={{
+                background: "#f1f5f9",
+                color: "#0f172a",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                fontWeight: "700",
+                fontSize: "12px",
+                textDecoration: "none",
+                textAlign: "center",
+                display: "block",
+              }}
+            >
+              ⚡ Bulk Optimize Collections →
+            </Link>
+          </div>
+
+          {/* Store Pages */}
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "12px",
+              padding: "20px",
+              border: "1px solid #e1e3e5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: "14px",
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "28px" }}>📄</span>
+                <span style={{ background: "#ede9fe", color: "#5b21b6", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
+                  STORE PAGES
+                </span>
+              </div>
+              <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "8px" }}>
+                {pagesCount}
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+                {pagesCount > 0 ? "Content Pages (About, Contact, FAQ)" : "0 Pages in Shopify"}
+              </div>
+            </div>
+            {pagesCount > 0 ? (
+              <Link
+                to="/app/bulk-optimizer?resource=pages"
+                style={{
+                  background: "#4338ca",
+                  color: "#ffffff",
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  fontWeight: "700",
+                  fontSize: "12px",
+                  textDecoration: "none",
+                  textAlign: "center",
+                  display: "block",
+                }}
+              >
+                ⚡ Bulk Optimize Pages →
+              </Link>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button
+                  type="button"
+                  disabled={isCreatingPages}
+                  onClick={handleCreateStarterPages}
+                  style={{
+                    background: "linear-gradient(135deg, #4338ca 0%, #3730a3 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    fontWeight: "700",
+                    fontSize: "12px",
+                    cursor: isCreatingPages ? "wait" : "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  {isCreatingPages ? "⏳ Creating Pages..." : "⚡ 1-Click: Create Essential Pages"}
+                </button>
+                <Link
+                  to="/app/bulk-optimizer?resource=pages"
+                  style={{
+                    color: "#4338ca",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    textAlign: "center",
+                    textDecoration: "none",
+                  }}
+                >
+                  View in Bulk Optimizer →
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Blog Articles */}
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "12px",
+              padding: "20px",
+              border: "1px solid #e1e3e5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: "14px",
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "28px" }}>📝</span>
+                <span style={{ background: "#ccfbf1", color: "#0f766e", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
+                  BLOG POSTS
+                </span>
+              </div>
+              <div style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", marginTop: "8px" }}>
+                {articlesCount}
+              </div>
+              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+                {articlesCount > 0 ? "Editorial Blog Articles" : "0 Blog Articles in Shopify"}
+              </div>
+            </div>
+            {articlesCount > 0 ? (
+              <Link
+                to="/app/bulk-optimizer?resource=articles"
+                style={{
+                  background: "#0e7490",
+                  color: "#ffffff",
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  fontWeight: "700",
+                  fontSize: "12px",
+                  textDecoration: "none",
+                  textAlign: "center",
+                  display: "block",
+                }}
+              >
+                ⚡ Bulk Optimize Articles →
+              </Link>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button
+                  type="button"
+                  disabled={isCreatingArticle}
+                  onClick={handleCreateStarterArticle}
+                  style={{
+                    background: "linear-gradient(135deg, #0e7490 0%, #0369a1 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    fontWeight: "700",
+                    fontSize: "12px",
+                    cursor: isCreatingArticle ? "wait" : "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  {isCreatingArticle ? "⏳ Creating Article..." : "⚡ 1-Click: Create Starter Article"}
+                </button>
+                <Link
+                  to="/app/bulk-optimizer?resource=articles"
+                  style={{
+                    color: "#0e7490",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    textAlign: "center",
+                    textDecoration: "none",
+                  }}
+                >
+                  View in Bulk Optimizer →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </s-section>
