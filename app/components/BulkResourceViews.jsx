@@ -419,15 +419,15 @@ export function BulkResourceTable({
           boxSizing: "border-box",
         }}
       >
-        <table style={{ width: "100%", minWidth: "1050px", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
           <thead>
             <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
-              <th style={{ width: "38px", padding: "12px 14px" }}></th>
-              <th style={{ width: "200px", minWidth: "170px", padding: "12px 14px" }}>{categoryLabel.slice(0, -1) || "Item"}</th>
-              <th style={{ width: "220px", padding: "12px 14px" }}>SEO Title (Max {TITLE_MAX})</th>
-              <th style={{ width: "230px", padding: "12px 14px" }}>Target Keywords</th>
-              <th style={{ padding: "12px 14px", minWidth: "300px" }}>SEO Description (Max {DESC_MAX})</th>
-              <th style={{ width: "95px", padding: "12px 14px", textAlign: "right" }}>Status</th>
+              <th style={{ width: "36px", padding: "10px 8px", textAlign: "center" }}></th>
+              <th style={{ width: "18%", minWidth: "140px", padding: "10px 12px" }}>{categoryLabel.slice(0, -1) || "Item"}</th>
+              <th style={{ width: "18%", minWidth: "140px", padding: "10px 12px" }}>SEO Title (Max {TITLE_MAX})</th>
+              <th style={{ width: "20%", minWidth: "150px", padding: "10px 12px" }}>Target Keywords</th>
+              <th style={{ width: "36%", minWidth: "220px", padding: "10px 12px" }}>SEO Description (Max {DESC_MAX})</th>
+              <th style={{ width: "80px", minWidth: "75px", padding: "10px 8px", textAlign: "center" }}>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -456,7 +456,7 @@ export function BulkResourceTable({
                       background: isSelected ? "#f0fdf4" : dirty ? "#fefce8" : "transparent",
                     }}
                   >
-                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                    <td style={{ padding: "10px 8px", verticalAlign: "top", textAlign: "center" }}>
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -470,14 +470,14 @@ export function BulkResourceTable({
                     </td>
 
                     {/* Column 2: Item Name & Handle */}
-                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
                       <div style={{ fontWeight: "700", color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
                       {item.handle && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>/{item.handle}</div>}
                       {item.blogTitle && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>Blog: {item.blogTitle}</div>}
                     </td>
 
                     {/* Column 3: SEO Title (made smaller) */}
-                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
                       <div style={{ position: "relative" }}>
                         <input
                           type="text"
@@ -518,7 +518,7 @@ export function BulkResourceTable({
                     </td>
 
                     {/* Column 4: Target Keywords (Dedicated editable column for all resources) */}
-                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
                       <div style={{ position: "relative" }}>
                         <input
                           type="text"
@@ -576,7 +576,7 @@ export function BulkResourceTable({
                     </td>
 
                     {/* Column 5: SEO Description (made larger) */}
-                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
                       <div style={{ position: "relative" }}>
                         <textarea
                           rows={3}
@@ -619,7 +619,7 @@ export function BulkResourceTable({
                     </td>
 
                     {/* Column 6: Status */}
-                    <td style={{ padding: "12px 14px", verticalAlign: "top", textAlign: "right" }}>
+                    <td style={{ padding: "10px 8px", verticalAlign: "top", textAlign: "center" }}>
                       {dirty ? (
                         <span
                           style={{

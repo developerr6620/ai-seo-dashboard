@@ -509,8 +509,42 @@ export default function BulkOptimizer() {
     navigate(`?${nextParams.toString()}`);
   };
 
+  useEffect(() => {
+    const expandLayout = () => {
+      document.querySelectorAll("s-page").forEach((el) => {
+        el.setAttribute("inline-size", "large");
+        el.setAttribute("inlineSize", "large");
+        if (el.shadowRoot) {
+          const id = "bulk-fullwidth-style";
+          if (!el.shadowRoot.getElementById(id)) {
+            const style = document.createElement("style");
+            style.id = id;
+            style.textContent = `
+              :host { max-width: 100% !important; width: 100% !important; }
+              .container, .content, .page, [class*="container"], [class*="page"], [class*="layout"] {
+                max-width: 100% !important;
+                width: 100% !important;
+                padding-left: 8px !important;
+                padding-right: 8px !important;
+                margin: 0 !important;
+              }
+            `;
+            el.shadowRoot.appendChild(style);
+          }
+        }
+      });
+    };
+    expandLayout();
+    const interval = setInterval(expandLayout, 300);
+    const timeout = setTimeout(() => clearInterval(interval), 2500);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, []);
+
   return (
-    <s-page full-width heading="🚀 1-Click Bulk SEO Optimizer">
+    <s-page inline-size="large" inlineSize="large" full-width heading="🚀 1-Click Bulk SEO Optimizer">
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -519,6 +553,8 @@ export default function BulkOptimizer() {
         :root {
           --p-page-width: 100% !important;
           --p-page-max-width: 100% !important;
+          --s-page-max-width: 100% !important;
+          --s-page-inline-size: 100% !important;
         }
         body, html {
           margin: 0 !important;
@@ -544,9 +580,10 @@ export default function BulkOptimizer() {
         div[class*="Page-Container"] {
           max-width: 100% !important;
           width: 100% !important;
-          margin: 0 !important;
-          padding-left: 6px !important;
-          padding-right: 6px !important;
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+          padding-left: 8px !important;
+          padding-right: 8px !important;
           box-sizing: border-box !important;
         }
         s-section {
@@ -555,7 +592,7 @@ export default function BulkOptimizer() {
           max-width: 100% !important;
         }
       `}</style>
-      <div style={{ width: "100%", maxWidth: "100%", margin: "0", padding: "0 6px", boxSizing: "border-box" }}>
+      <div style={{ width: "100%", maxWidth: "100%", margin: "0", padding: "0 8px 30px 8px", boxSizing: "border-box" }}>
 
       {/* Toast Notification */}
       {toastMessage && (

@@ -15,10 +15,12 @@ export default function App() {
           :root {
             --p-page-width: 100% !important;
             --p-page-max-width: 100% !important;
+            --s-page-max-width: 100% !important;
+            --s-page-inline-size: 100% !important;
           }
           html, body {
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
             background-color: #f8fafc;
@@ -44,7 +46,11 @@ export default function App() {
           div[class*="Page-Container"] {
             max-width: 100% !important;
             width: 100% !important;
-            margin: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+            box-sizing: border-box !important;
           }
         `}</style>
         <Meta />
