@@ -508,9 +508,13 @@ export function BulkCollectionsView({
 export function BulkPagesView({
   pages: initialPages,
   storeName,
+  shopDomain,
+  clientId,
   contentScopeError,
   onNotify,
 }) {
+  const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
+
   const [pages, setPages] = useState(initialPages);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
@@ -672,37 +676,47 @@ export function BulkPagesView({
             background: "#fffbeb",
             border: "1.5px solid #fde68a",
             borderRadius: "10px",
-            padding: "14px 18px",
+            padding: "16px 20px",
             color: "#92400e",
             fontSize: "13px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: "12px",
+            gap: "14px",
+            boxShadow: "0 2px 8px rgba(251, 191, 36, 0.15)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "20px" }}>⚠️</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "24px" }}>⚠️</span>
             <div>
-              <strong>Shopify Content Permission Pending:</strong> To access and save Online Store Pages, please grant the <code>write_content</code> permission.
+              <div style={{ fontWeight: "800", fontSize: "14px", color: "#78350f" }}>
+                Shopify Content Permission Pending
+              </div>
+              <div style={{ marginTop: "2px", color: "#92400e" }}>
+                To access and optimize your Online Store Pages, please grant the <code>write_content</code> permission in Shopify.
+              </div>
             </div>
           </div>
           <a
-            href="/app/grant-content"
+            href={reauthUrl}
             target="_top"
             style={{
-              background: "#b45309",
+              background: "linear-gradient(135deg, #b45309 0%, #92400e 100%)",
               color: "#ffffff",
-              padding: "8px 16px",
-              borderRadius: "6px",
+              padding: "10px 20px",
+              borderRadius: "8px",
               fontWeight: "700",
               textDecoration: "none",
-              fontSize: "12px",
+              fontSize: "13px",
               whiteSpace: "nowrap",
+              boxShadow: "0 2px 8px rgba(180, 83, 9, 0.35)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
-            Grant Permission →
+            🔑 Grant Permission in Shopify →
           </a>
         </div>
       )}
@@ -887,8 +901,38 @@ export function BulkPagesView({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={5} style={{ padding: "44px 24px", textAlign: "center" }}>
-                  {pages.length === 0 ? (
-                    <div style={{ maxWidth: "560px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                  {contentScopeError ? (
+                    <div style={{ maxWidth: "580px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                      <div style={{ fontSize: "40px" }}>🔑</div>
+                      <div style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a" }}>
+                        Action Required: Grant Content Permission
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
+                        Shopify requires store approval to read and optimize <strong>Online Store Pages</strong>. Click below to approve the updated permission in Shopify.
+                      </div>
+                      <a
+                        href={reauthUrl}
+                        target="_top"
+                        style={{
+                          background: "linear-gradient(135deg, #b45309 0%, #92400e 100%)",
+                          color: "#ffffff",
+                          padding: "12px 24px",
+                          borderRadius: "8px",
+                          fontWeight: "700",
+                          textDecoration: "none",
+                          fontSize: "14px",
+                          boxShadow: "0 3px 12px rgba(180, 83, 9, 0.35)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          marginTop: "6px",
+                        }}
+                      >
+                        🔑 1-Click: Grant Content Permission in Shopify →
+                      </a>
+                    </div>
+                  ) : pages.length === 0 ? (
+                    <div style={{ maxWidth: "580px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
                       <div style={{ fontSize: "36px" }}>📄</div>
                       <div style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>
                         No Content Pages Found in Shopify (0 Pages)
@@ -906,7 +950,7 @@ export function BulkPagesView({
                             color: "#ffffff",
                             border: "none",
                             borderRadius: "8px",
-                            padding: "10px 18px",
+                            padding: "10px 20px",
                             fontSize: "13px",
                             fontWeight: "700",
                             cursor: isCreatingStarter ? "wait" : "pointer",
@@ -918,24 +962,6 @@ export function BulkPagesView({
                         >
                           {isCreatingStarter ? "⏳ Creating Essential Pages..." : "⚡ 1-Click: Create Essential SEO Pages"}
                         </button>
-                        <a
-                          href="/app/bulk-optimizer?grant_scopes=1"
-                          target="_top"
-                          style={{
-                            background: "#f1f5f9",
-                            color: "#334155",
-                            borderRadius: "8px",
-                            padding: "10px 16px",
-                            fontSize: "13px",
-                            fontWeight: "700",
-                            textDecoration: "none",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                          }}
-                        >
-                          🔑 Refresh Permission
-                        </a>
                       </div>
                       <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
                         Instantly generates <em>About Us</em>, <em>Contact Us</em>, <em>FAQ</em>, and <em>Privacy Policy</em> with pre-written, high-ranking SEO tags.
@@ -1082,9 +1108,13 @@ export function BulkPagesView({
 export function BulkArticlesView({
   articles: initialArticles,
   storeName,
+  shopDomain,
+  clientId,
   contentScopeError,
   onNotify,
 }) {
+  const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
+
   const [articles, setArticles] = useState(initialArticles);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
@@ -1244,40 +1274,50 @@ export function BulkArticlesView({
       {contentScopeError && (
         <div
           style={{
-            background: "#fffbeb",
-            border: "1.5px solid #fde68a",
+            background: "#ecfeff",
+            border: "1.5px solid #a5f3fc",
             borderRadius: "10px",
-            padding: "14px 18px",
-            color: "#92400e",
+            padding: "16px 20px",
+            color: "#155e75",
             fontSize: "13px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: "12px",
+            gap: "14px",
+            boxShadow: "0 2px 8px rgba(6, 182, 212, 0.15)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "20px" }}>⚠️</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "24px" }}>⚠️</span>
             <div>
-              <strong>Shopify Content Permission Pending:</strong> To access and save Blog Articles, please grant the <code>write_content</code> permission.
+              <div style={{ fontWeight: "800", fontSize: "14px", color: "#083344" }}>
+                Shopify Content Permission Pending
+              </div>
+              <div style={{ marginTop: "2px", color: "#155e75" }}>
+                To access and optimize your Blog Articles, please grant the <code>write_content</code> permission in Shopify.
+              </div>
             </div>
           </div>
           <a
-            href="/app/grant-content"
+            href={reauthUrl}
             target="_top"
             style={{
-              background: "#0e7490",
+              background: "linear-gradient(135deg, #0891b2 0%, #0e7490 100%)",
               color: "#ffffff",
-              padding: "8px 16px",
-              borderRadius: "6px",
+              padding: "10px 20px",
+              borderRadius: "8px",
               fontWeight: "700",
               textDecoration: "none",
-              fontSize: "12px",
+              fontSize: "13px",
               whiteSpace: "nowrap",
+              boxShadow: "0 2px 8px rgba(14, 116, 144, 0.35)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
-            Grant Permission →
+            🔑 Grant Permission in Shopify →
           </a>
         </div>
       )}
@@ -1462,14 +1502,44 @@ export function BulkArticlesView({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={5} style={{ padding: "44px 24px", textAlign: "center" }}>
-                  {articles.length === 0 ? (
-                    <div style={{ maxWidth: "560px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                  {contentScopeError ? (
+                    <div style={{ maxWidth: "580px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                      <div style={{ fontSize: "40px" }}>🔑</div>
+                      <div style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a" }}>
+                        Action Required: Grant Content Permission
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
+                        Shopify requires store approval to read and optimize <strong>Blog Articles</strong>. Click below to approve the updated permission in Shopify.
+                      </div>
+                      <a
+                        href={reauthUrl}
+                        target="_top"
+                        style={{
+                          background: "linear-gradient(135deg, #0891b2 0%, #0e7490 100%)",
+                          color: "#ffffff",
+                          padding: "12px 24px",
+                          borderRadius: "8px",
+                          fontWeight: "700",
+                          textDecoration: "none",
+                          fontSize: "14px",
+                          boxShadow: "0 3px 12px rgba(14, 116, 144, 0.35)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          marginTop: "6px",
+                        }}
+                      >
+                        🔑 1-Click: Grant Content Permission in Shopify →
+                      </a>
+                    </div>
+                  ) : articles.length === 0 ? (
+                    <div style={{ maxWidth: "580px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
                       <div style={{ fontSize: "36px" }}>📝</div>
                       <div style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>
                         No Blog Articles Found in Shopify (0 Posts)
                       </div>
                       <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
-                        In Shopify, <strong>Blog Articles</strong> are editorial posts managed under <strong>Shopify Admin → Online Store → Blog posts</strong>. If your store hasn&apos;t published articles yet, you can create a starter post in 1 click or grant content access.
+                        In Shopify, <strong>Blog Articles</strong> are editorial posts managed under <strong>Shopify Admin → Online Store → Blog posts</strong>. If your store hasn&apos;t published articles yet, you can create a starter post in 1 click.
                       </div>
                       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center", marginTop: "6px" }}>
                         <button
@@ -1481,7 +1551,7 @@ export function BulkArticlesView({
                             color: "#ffffff",
                             border: "none",
                             borderRadius: "8px",
-                            padding: "10px 18px",
+                            padding: "10px 20px",
                             fontSize: "13px",
                             fontWeight: "700",
                             cursor: isCreatingStarter ? "wait" : "pointer",
@@ -1493,32 +1563,14 @@ export function BulkArticlesView({
                         >
                           {isCreatingStarter ? "⏳ Creating Starter Article..." : "⚡ 1-Click: Create Starter SEO Blog Article"}
                         </button>
-                        <a
-                          href="/app/grant-content"
-                          target="_top"
-                          style={{
-                            background: "#f1f5f9",
-                            color: "#334155",
-                            borderRadius: "8px",
-                            padding: "10px 16px",
-                            fontSize: "13px",
-                            fontWeight: "700",
-                            textDecoration: "none",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                          }}
-                        >
-                          🔑 Refresh Permission
-                        </a>
                       </div>
                       <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
-                        Instantly generates a high-ranking buyer guide article with pre-written SEO metadata and headings.
+                        Instantly creates an introductory article with optimized SEO title and description.
                       </div>
                     </div>
                   ) : (
                     <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                      No blog articles match your current search/filter.
+                      No store blog articles match your current search/filter.
                     </div>
                   )}
                 </td>

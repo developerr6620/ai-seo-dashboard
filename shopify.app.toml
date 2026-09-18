@@ -72,7 +72,11 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://ai-seo-dashboard.onrender.com/api/auth" ]
+redirect_urls = [
+  "https://ai-seo-dashboard.onrender.com/auth/callback",
+  "https://ai-seo-dashboard.onrender.com/auth/shopify/callback",
+  "https://ai-seo-dashboard.onrender.com/api/auth"
+]
 
 [build]
 automatically_update_urls_on_dev = true

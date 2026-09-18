@@ -48,8 +48,9 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
   // If user requested to grant/update missing scopes
-  if (url.searchParams.get("grant_scopes") === "1" && scopes?.request) {
-    await scopes.request(["write_content"]);
+  if (url.searchParams.get("grant_scopes") === "1") {
+    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=cdeb2fd429e5b0cceb3d43906b7f2148&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
+    return redirect(authUrl);
   }
 
   // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
@@ -386,6 +387,8 @@ export const loader = async ({ request }) => {
 
     return {
       shop: shopInfo,
+      shopDomain: shop,
+      clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
       products,
       collections,
       pages,
@@ -431,6 +434,8 @@ export default function BulkOptimizer() {
   const [searchParams] = useSearchParams();
 
   const shop = loaderData?.shop || { name: "Your Store" };
+  const shopDomain = loaderData?.shopDomain || "develops-test-store.myshopify.com";
+  const clientId = loaderData?.clientId || "cdeb2fd429e5b0cceb3d43906b7f2148";
   const collections = loaderData?.collections || [];
   const pages = loaderData?.pages || [];
   const articles = loaderData?.articles || [];
@@ -1688,6 +1693,8 @@ export default function BulkOptimizer() {
         <BulkPagesView
           pages={pages}
           storeName={shop.name}
+          shopDomain={shopDomain}
+          clientId={clientId}
           contentScopeError={contentScopeError}
           onNotify={setToastMessage}
         />
@@ -1698,6 +1705,8 @@ export default function BulkOptimizer() {
         <BulkArticlesView
           articles={articles}
           storeName={shop.name}
+          shopDomain={shopDomain}
+          clientId={clientId}
           contentScopeError={contentScopeError}
           onNotify={setToastMessage}
         />

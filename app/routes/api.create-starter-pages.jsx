@@ -92,12 +92,26 @@ export const action = async ({ request }) => {
       );
 
       const articleJson = await articleRes.json();
+      if (articleJson?.errors?.length > 0) {
+        const isScope = articleJson.errors.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"));
+        return Response.json({
+          success: false,
+          error: isScope
+            ? "Permission pending: Please click 'Grant Content Permission' above first to allow Shopify to create and manage blog articles."
+            : articleJson.errors.map((e) => e.message).join(", "),
+        });
+      }
+
       const userErrors = articleJson?.data?.articleCreate?.userErrors || [];
       if (userErrors.length > 0) {
         return Response.json({ success: false, error: userErrors.map((e) => e.message).join(", ") });
       }
 
       const createdArticle = articleJson?.data?.articleCreate?.article;
+      if (!createdArticle) {
+        return Response.json({ success: false, error: "Article was not created" }, { status: 400 });
+      }
+
       return Response.json({
         success: true,
         createdCount: 1,
@@ -190,6 +204,17 @@ export const action = async ({ request }) => {
         );
 
         const resJson = await res.json();
+        if (resJson?.errors?.length > 0) {
+          const isScope = resJson.errors.some((e) => e.message?.toLowerCase().includes("access") || e.message?.toLowerCase().includes("scope"));
+          errors.push({
+            title: pageInput.title,
+            error: isScope
+              ? "Permission pending: Please click 'Grant Content Permission' above first to allow Shopify to create and manage pages."
+              : resJson.errors.map((e) => e.message).join(", "),
+          });
+          continue;
+        }
+
         const userErrors = resJson?.data?.pageCreate?.userErrors || [];
         if (userErrors.length > 0) {
           errors.push({
