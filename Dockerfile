@@ -1,19 +1,20 @@
 FROM node:20-alpine
 RUN apk add --no-cache openssl
 
-EXPOSE 3000
-
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=11005
 ENV DATABASE_URL=file:/app/data/prod.sqlite
 
-# Create directory for SQLite database
+EXPOSE 11005
+
+# Persist SQLite outside the image layers
 RUN mkdir -p /app/data
 
 COPY package.json package-lock.json* ./
 
-# Install dependencies including build tools
+# Install dependencies including build tools needed for Prisma
 RUN npm ci
 
 COPY . .

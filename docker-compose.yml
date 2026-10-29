@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    container_name: ai-seo-dashboard
+    ports:
+      - "11005:11005"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 11005
+      # Keep DB on the named volume so data survives rebuilds
+      DATABASE_URL: file:/app/data/prod.sqlite
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  app-data:

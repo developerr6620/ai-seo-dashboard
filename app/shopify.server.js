@@ -10,7 +10,7 @@ import prisma from "./db.server";
 const defaultAppUrl =
   process.env.SHOPIFY_APP_URL ||
   (process.env.NODE_ENV === "production"
-    ? "https://ai-seo-dashboard.onrender.com"
+    ? "https://seooptimizer.zooq.app"
     : "http://localhost:3000");
 
 const shopify = shopifyApp({

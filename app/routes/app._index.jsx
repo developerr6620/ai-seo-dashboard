@@ -344,7 +344,7 @@ export default function Dashboard() {
   const articlesCount = initialArticlesCount;
   const [dashToast, setDashToast] = useState(null);
 
-  const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
+  const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://seooptimizer.zooq.app/auth/callback")}`;
 
   // Poll for audit completion if background scan is in progress
   useEffect(() => {

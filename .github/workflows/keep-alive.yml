@@ -13,9 +13,9 @@ jobs:
     steps:
       - name: Ping Health Endpoint
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" https://ai-seo-dashboard.onrender.com/api/health)
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://seooptimizer.zooq.app/api/health)
           echo "Health check HTTP status: $response"
           if [ "$response" -ne 200 ]; then
             echo "Warning: Received HTTP $response, retrying with root URL..."
-            curl -s -o /dev/null https://ai-seo-dashboard.onrender.com/
+            curl -s -o /dev/null https://seooptimizer.zooq.app/
           fi

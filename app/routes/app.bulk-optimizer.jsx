@@ -43,7 +43,7 @@ export const loader = async ({ request }) => {
 
   // If user requested to grant/update missing scopes
   if (url.searchParams.get("grant_scopes") === "1") {
-    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=cdeb2fd429e5b0cceb3d43906b7f2148&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://ai-seo-dashboard.onrender.com/auth/callback")}`;
+    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=cdeb2fd429e5b0cceb3d43906b7f2148&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://seooptimizer.zooq.app/auth/callback")}`;
     return redirect(authUrl);
   }
 

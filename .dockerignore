@@ -1,3 +1,17 @@
 .cache
 build
 node_modules
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose*.yml
+README.md
+*.md
+.vscode
+.idea
+.DS_Store
+npm-debug.log*
+yarn-error.log*
