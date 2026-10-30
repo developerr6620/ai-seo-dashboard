@@ -1,9 +1,5 @@
-name: Keep Render App Alive
+name: Keep App Alive
 
-# Keep-alive ping disabled: Render service suspended and moving to Railway
-# on:
-#   schedule:
-#     - cron: '*/10 * * * *'
 on:
   workflow_dispatch:
 

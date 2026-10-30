@@ -10,3 +10,4 @@ export const action = async ({ request }) => {
   console.log(`[Compliance] Received ${topic} for ${shop}`);
   return new Response(null, { status: 200 });
 };
+
