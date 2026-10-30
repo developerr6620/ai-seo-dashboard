@@ -44,7 +44,7 @@ export default function Auth() {
       <s-page>
         <Form method="post" onSubmit={handleDomainSubmit}>
           <input type="hidden" name="shop" value={shop.includes(".") ? shop : `${shop}.myshopify.com`} />
-          <s-section heading="⚡ Log in to AI SEO Content Master">
+          <s-section heading="Log in to AI SEO Dashboard">
             <s-text-field
               name="shop"
               label="Shopify Store Domain"

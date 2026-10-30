@@ -3,6 +3,22 @@ import { useState, useMemo, useCallback } from "react";
 import { useLoaderData, useNavigation, Link } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import {
+  IconBox,
+  IconFolder,
+  IconImage,
+  IconSparkles,
+  IconZap,
+  IconSave,
+  IconSearch,
+  IconTag,
+  IconTable,
+  IconGrid,
+  IconLightbulb,
+  IconAlertTriangle,
+  IconFileText,
+  IconRefresh
+} from "../components/Icons";
 import { authenticate } from "../shopify.server";
 import {
   ALT_MAX,
@@ -512,9 +528,9 @@ export default function ImageAltOptimizer() {
 
     setFeedback({
       type: "info",
-      message: `✨ Generated ${count} ALT texts! Review them below and click 'Save Changes' to apply to Shopify.`,
+      message: `Generated ${count} ALT texts! Review them below and click 'Save Changes' to apply to Shopify.`,
     });
-    if (shopify?.toast) shopify.toast.show(`✨ Generated ${count} ALT texts!`);
+    if (shopify?.toast) shopify.toast.show(`Generated ${count} ALT texts!`);
   };
 
   // ==========================================
@@ -580,9 +596,9 @@ export default function ImageAltOptimizer() {
     setIsBatchSaving(false);
     setFeedback({
       type: "success",
-      message: `🎉 Successfully generated & saved ${savedCount} ALT tags directly to Shopify Content → Files!`,
+      message: `Successfully generated & saved ${savedCount} ALT tags directly to Shopify Content → Files!`,
     });
-    if (shopify?.toast) shopify.toast.show(`🎉 Saved ${savedCount} Store File ALT tags!`);
+    if (shopify?.toast) shopify.toast.show(`Saved ${savedCount} Store File ALT tags!`);
   };
 
   // Apply clean filename to selected files
@@ -601,7 +617,7 @@ export default function ImageAltOptimizer() {
       }
     });
     setDraftFileAlts((prev) => ({ ...prev, ...drafts }));
-    if (shopify?.toast) shopify.toast.show(`✨ Applied clean filenames to ${selectedFileIds.length} images!`);
+    if (shopify?.toast) shopify.toast.show(`Applied clean filenames to ${selectedFileIds.length} images!`);
   };
 
   // Save selected files to Shopify
@@ -648,9 +664,9 @@ export default function ImageAltOptimizer() {
     setSelectedFileIds([]);
     setFeedback({
       type: "success",
-      message: `🎉 Successfully saved ${savedCount} selected Store File ALT tags to Shopify!`,
+      message: `Successfully saved ${savedCount} selected Store File ALT tags to Shopify!`,
     });
-    if (shopify?.toast) shopify.toast.show(`🎉 Saved ${savedCount} selected files!`);
+    if (shopify?.toast) shopify.toast.show(`Saved ${savedCount} selected files!`);
   };
 
   // Find and replace text across selected files
@@ -704,7 +720,7 @@ export default function ImageAltOptimizer() {
       const data = await res.json();
       if (data.success) {
         setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, alt: altText } : f)));
-        if (shopify?.toast) shopify.toast.show("✓ Store File ALT text saved!");
+        if (shopify?.toast) shopify.toast.show("Store File ALT text saved!");
       } else {
         setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
       }
@@ -734,7 +750,7 @@ export default function ImageAltOptimizer() {
       const data = await res.json();
       if (data.success) {
         setCollections((prev) => prev.map((c) => (c.id === collection.id ? { ...c, alt: altText } : c)));
-        if (shopify?.toast) shopify.toast.show("✓ Collection Banner ALT text saved!");
+        if (shopify?.toast) shopify.toast.show("Collection Banner ALT text saved!");
       } else {
         setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
       }
@@ -766,7 +782,7 @@ export default function ImageAltOptimizer() {
         setProducts((prev) =>
           prev.map((p) => (p.id !== productId ? p : { ...p, media: p.media.map((m) => (m.id === mediaId ? { ...m, alt: altText } : m)) }))
         );
-        if (shopify?.toast) shopify.toast.show("✓ Product Image ALT text saved!");
+        if (shopify?.toast) shopify.toast.show("Product Image ALT text saved!");
       } else {
         setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
       }
@@ -832,8 +848,8 @@ export default function ImageAltOptimizer() {
       }
 
       setIsBatchSaving(false);
-      setFeedback({ type: "success", message: `🎉 Successfully saved ${saved} Product Image ALT texts to Shopify!` });
-      if (shopify?.toast) shopify.toast.show(`🎉 Saved ${saved} Product Image ALT texts!`);
+      setFeedback({ type: "success", message: `Successfully saved ${saved} Product Image ALT texts to Shopify!` });
+      if (shopify?.toast) shopify.toast.show(`Saved ${saved} Product Image ALT texts!`);
     } else if (activeTab === "files") {
       const dirtyFiles = files
         .filter((f) => (draftFileAlts[f.id] || "").trim() !== (f.alt || "").trim())
@@ -873,8 +889,8 @@ export default function ImageAltOptimizer() {
       }
 
       setIsBatchSaving(false);
-      setFeedback({ type: "success", message: `🎉 Successfully saved ${saved} Store File ALT texts to Shopify!` });
-      if (shopify?.toast) shopify.toast.show(`🎉 Saved ${saved} Store File ALT texts!`);
+      setFeedback({ type: "success", message: `Successfully saved ${saved} Store File ALT texts to Shopify!` });
+      if (shopify?.toast) shopify.toast.show(`Saved ${saved} Store File ALT texts!`);
     } else if (activeTab === "collections") {
       const dirtyCollections = collections
         .filter((c) => (draftCollectionAlts[c.id] || "").trim() !== (c.alt || "").trim())
@@ -914,8 +930,8 @@ export default function ImageAltOptimizer() {
       }
 
       setIsBatchSaving(false);
-      setFeedback({ type: "success", message: `🎉 Successfully saved ${saved} Collection Banner ALT texts!` });
-      if (shopify?.toast) shopify.toast.show(`🎉 Saved ${saved} Collection Banner ALT texts!`);
+      setFeedback({ type: "success", message: `Successfully saved ${saved} Collection Banner ALT texts!` });
+      if (shopify?.toast) shopify.toast.show(`Saved ${saved} Collection Banner ALT texts!`);
     }
   };
 
@@ -978,7 +994,7 @@ export default function ImageAltOptimizer() {
               transition: "all 0.15s ease",
             }}
           >
-            <span>📦</span> Product Images ({products.reduce((acc, p) => acc + p.media.length, 0)})
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconBox size={16} /> Product Images</span> ({products.reduce((acc, p) => acc + p.media.length, 0)})
           </button>
 
           <button
@@ -1002,7 +1018,7 @@ export default function ImageAltOptimizer() {
               transition: "all 0.15s ease",
             }}
           >
-            <span>🖼️</span> Store Files & Banners ({files.length})
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconImage size={16} /> Store Files & Banners</span> ({files.length})
           </button>
 
           <button
@@ -1026,7 +1042,7 @@ export default function ImageAltOptimizer() {
               transition: "all 0.15s ease",
             }}
           >
-            <span>📁</span> Collection Banners ({collections.length})
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconFolder size={16} /> Collection Banners</span> ({collections.length})
           </button>
         </div>
 
@@ -1046,7 +1062,7 @@ export default function ImageAltOptimizer() {
               gap: "12px",
             }}
           >
-            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <IconAlertTriangle size={20} color="#ea580c" />
             <div>
               <strong>Shopify Files Scope Pending:</strong> If your files library does not show images, please reload the app in your Shopify Admin to accept the newly added <code>write_files</code> permission.
             </div>
@@ -1072,9 +1088,9 @@ export default function ImageAltOptimizer() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "18px" }}>💡</span>
+              <IconLightbulb size={20} color="#d97706" />
               <span>
-                <strong>Homepage & Theme Assets:</strong> Homepage banners, graphics, and comparison table icons (e.g. <code>Frame</code>, <code>complate</code>, <code>limited</code>, <code>none</code>) are located right here under Store Files. Use the <strong>⚠️ Missing ALT</strong> filter or the <strong>⚡ 1-Click: Auto-fill & Save</strong> button below to optimize them all at once!
+                <strong>Homepage & Theme Assets:</strong> Homepage banners, graphics, and comparison table icons (e.g. <code>Frame</code>, <code>complate</code>, <code>limited</code>, <code>none</code>) are located right here under Store Files. Use the <strong>Missing ALT</strong> filter or the <strong>1-Click: Auto-fill & Save</strong> button below to optimize them all at once!
               </span>
             </div>
           </div>
@@ -1162,7 +1178,7 @@ export default function ImageAltOptimizer() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
             <div>
               <div style={{ fontSize: "16px", fontWeight: "800", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
-                <span>✨</span> Smart AI Template for {stats.label}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconSparkles size={14} /> Smart AI Template for</span> {stats.label}
               </div>
               <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0" }}>
                 {activeTab === "products"
@@ -1194,7 +1210,7 @@ export default function ImageAltOptimizer() {
                     boxShadow: "0 4px 12px rgba(99, 102, 241, 0.35)",
                   }}
                 >
-                  <span>🚀</span> 1-Click Auto-Fill & Save All Missing ({stats.missing})
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconZap size={14} /> 1-Click Auto-Fill & Save All Missing</span> ({stats.missing})
                 </button>
               )}
 
@@ -1215,7 +1231,7 @@ export default function ImageAltOptimizer() {
                   gap: "6px",
                 }}
               >
-                <span>✨</span> Auto-Generate Missing ({stats.missing})
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconSparkles size={14} /> Auto-Generate Missing</span> ({stats.missing})
               </button>
 
               {dirtyCount > 0 && (
@@ -1237,7 +1253,7 @@ export default function ImageAltOptimizer() {
                     gap: "6px",
                   }}
                 >
-                  <span>💾</span> {isBatchSaving ? "Saving..." : `Save Changes (${dirtyCount})`}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconSave size={14} /> {isBatchSaving ? "Saving..." : `Save Changes (${dirtyCount})`}</span>
                 </button>
               )}
             </div>
@@ -1382,7 +1398,7 @@ export default function ImageAltOptimizer() {
           <div style={{ flex: "1 1 300px", maxWidth: "450px" }}>
             <input
               type="text"
-              placeholder={`🔍 Search ${stats.label.toLowerCase()}...`}
+              placeholder={`Search ${stats.label.toLowerCase()}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: "100%", padding: "10px 14px", fontSize: "13px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#ffffff", boxSizing: "border-box", outline: "none" }}
@@ -1392,8 +1408,8 @@ export default function ImageAltOptimizer() {
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {[
               { id: "all", label: `All (${stats.total})` },
-              { id: "missing", label: `⚠️ Missing ALT (${stats.missing})`, highlight: stats.missing > 0 },
-              { id: "optimized", label: `✅ Optimized (${stats.withAlt})` },
+              { id: "missing", label: `Missing ALT (${stats.missing})`, highlight: stats.missing > 0 },
+              { id: "optimized", label: `Optimized (${stats.withAlt})` },
             ].map((f) => {
               const isSel = filterMode === f.id;
               return (
@@ -1461,7 +1477,7 @@ export default function ImageAltOptimizer() {
                     gap: "6px",
                   }}
                 >
-                  <span>📑</span> Compact Table
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconTable size={14} /> Compact Table</span>
                 </button>
                 <button
                   type="button"
@@ -1481,14 +1497,14 @@ export default function ImageAltOptimizer() {
                     gap: "6px",
                   }}
                 >
-                  <span>🎴</span> Card View
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconGrid size={14} /> Card View</span>
                 </button>
               </div>
             </div>
 
             {filteredProducts.length === 0 ? (
               <div style={{ background: "#ffffff", padding: "50px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "32px", marginBottom: "8px" }}>📦</div>
+                <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}><IconBox size={38} color="#94a3b8" /></div>
                 <div style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>No product images found matching criteria.</div>
               </div>
             ) : productViewMode === "table" ? (
@@ -1583,7 +1599,7 @@ export default function ImageAltOptimizer() {
                                     color: isMissing ? "#991b1b" : isOpt ? "#166534" : "#92400e",
                                   }}
                                 >
-                                  {isMissing ? "⚠️ Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
+                                  {isMissing ? "Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
                                 </span>
                               </td>
                               <td style={{ padding: "8px 12px", textAlign: "right" }}>
@@ -1614,9 +1630,7 @@ export default function ImageAltOptimizer() {
                                       color: "#2563eb",
                                       cursor: "pointer",
                                     }}
-                                  >
-                                    ✨ AI
-                                  </button>
+                                  ><span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconSparkles size={12} /> AI</span></button>
 
                                   {isDirty && (
                                     <button
@@ -1634,7 +1648,7 @@ export default function ImageAltOptimizer() {
                                         cursor: isSavingThis ? "wait" : "pointer",
                                       }}
                                     >
-                                      {isSavingThis ? "..." : "💾 Save"}
+                                      {isSavingThis ? "..." : "Save"}
                                     </button>
                                   )}
                                 </div>
@@ -1664,7 +1678,7 @@ export default function ImageAltOptimizer() {
                       <div>
                         <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>{p.title}</span>
                         <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: missingCount > 0 ? "#ffedd5" : "#dcfce7", color: missingCount > 0 ? "#9a3412" : "#166534" }}>
-                          {missingCount > 0 ? `⚠️ ${missingCount} Missing` : `✅ ${p.media.length} Optimized`}
+                          {missingCount > 0 ? `${missingCount} Missing` : `${p.media.length} Optimized`}
                         </span>
                       </div>
 
@@ -1688,9 +1702,7 @@ export default function ImageAltOptimizer() {
                           if (shopify?.toast) shopify.toast.show(`Generated for ${p.title}`);
                         }}
                         style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "4px 10px", fontSize: "11px", fontWeight: "700", cursor: "pointer" }}
-                      >
-                        ✨ Generate for Product
-                      </button>
+                      ><span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconSparkles size={12} /> Generate for Product</span></button>
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -1725,7 +1737,7 @@ export default function ImageAltOptimizer() {
                             </div>
 
                             <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
-                              {isMissing ? "⚠️ Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
+                              {isMissing ? "Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
                             </span>
 
                             <div style={{ display: "flex", gap: "6px" }}>
@@ -1745,9 +1757,7 @@ export default function ImageAltOptimizer() {
                                   setDraftProductAlts((prev) => ({ ...prev, [m.id]: gen }));
                                 }}
                                 style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "5px", padding: "5px 8px", fontSize: "11px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
-                              >
-                                ✨ AI
-                              </button>
+                              ><span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconSparkles size={12} /> AI</span></button>
 
                               {isDirty && (
                                 <button
@@ -1756,7 +1766,7 @@ export default function ImageAltOptimizer() {
                                   onClick={() => handleSaveProductMedia(p.id, m.id)}
                                   style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "5px", padding: "5px 10px", fontSize: "11px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
                                 >
-                                  {isSavingThis ? "..." : "💾 Save"}
+                                  {isSavingThis ? "..." : "Save"}
                                 </button>
                               )}
                             </div>
@@ -1889,7 +1899,7 @@ export default function ImageAltOptimizer() {
                     gap: "6px",
                   }}
                 >
-                  <span>📑</span> Compact Table ({filteredFiles.length})
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconTable size={14} /> Compact Table ({filteredFiles.length})</span>
                 </button>
                 <button
                   type="button"
@@ -1909,7 +1919,7 @@ export default function ImageAltOptimizer() {
                     gap: "6px",
                   }}
                 >
-                  <span>🎴</span> Card View
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconGrid size={14} /> Card View</span>
                 </button>
               </div>
             </div>
@@ -1961,7 +1971,7 @@ export default function ImageAltOptimizer() {
                       gap: "6px",
                     }}
                   >
-                    <span>✨</span> Auto-Fill Clean Filenames
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconSparkles size={14} /> Auto-Fill Clean Filenames</span>
                   </button>
 
                   <button
@@ -1981,7 +1991,7 @@ export default function ImageAltOptimizer() {
                       gap: "6px",
                     }}
                   >
-                    <span>🔍</span> Find & Replace
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconSearch size={14} /> Find & Replace</span>
                   </button>
 
                   <button
@@ -2001,7 +2011,7 @@ export default function ImageAltOptimizer() {
                       gap: "6px",
                     }}
                   >
-                    <span>🏷️</span> Add Prefix/Suffix
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconTag size={14} /> Add Prefix/Suffix</span>
                   </button>
 
                   <button
@@ -2022,7 +2032,7 @@ export default function ImageAltOptimizer() {
                       gap: "6px",
                     }}
                   >
-                    <span>💾</span> {isBatchSaving ? "Saving..." : `Save Selected (${selectedFileIds.length})`}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconSave size={14} /> {isBatchSaving ? "Saving..." : `Save Selected (${selectedFileIds.length})`}</span>
                   </button>
 
                   <button
@@ -2046,7 +2056,7 @@ export default function ImageAltOptimizer() {
 
             {filteredFiles.length === 0 ? (
               <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "36px", marginBottom: "10px" }}>🖼️</div>
+                <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}><IconImage size={38} color="#94a3b8" /></div>
                 <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>No store files found in Content &rarr; Files matching criteria.</div>
                 <p style={{ fontSize: "13px", color: "#64748b", margin: "6px auto 0 auto", maxWidth: "450px" }}>
                   Upload hero banners, sliders, and logos in your Shopify Admin under <strong>Content &rarr; Files</strong> to optimize them here.
@@ -2156,7 +2166,7 @@ export default function ImageAltOptimizer() {
                                   color: isMissing ? "#991b1b" : isOpt ? "#166534" : "#92400e",
                                 }}
                               >
-                                {isMissing ? "⚠️ Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
+                                {isMissing ? "Empty" : `${len}c ${isOpt ? "✓" : "Long"}`}
                               </span>
                             </td>
                             <td style={{ padding: "10px 14px", textAlign: "right" }}>
@@ -2183,9 +2193,7 @@ export default function ImageAltOptimizer() {
                                     color: "#2563eb",
                                     cursor: "pointer",
                                   }}
-                                >
-                                  ✨ Filename
-                                </button>
+                                ><span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconFileText size={12} /> Filename</span></button>
 
                                 {isDirty && (
                                   <button
@@ -2203,7 +2211,7 @@ export default function ImageAltOptimizer() {
                                       cursor: isSavingThis ? "wait" : "pointer",
                                     }}
                                   >
-                                    {isSavingThis ? "..." : "💾 Save"}
+                                    {isSavingThis ? "..." : "Save"}
                                   </button>
                                 )}
                               </div>
@@ -2266,7 +2274,7 @@ export default function ImageAltOptimizer() {
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                         <span style={{ fontSize: "11px", fontWeight: "700", color: "#475569" }}>File ALT Tag:</span>
                         <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
-                          {isMissing ? "⚠️ Missing ALT" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
+                          {isMissing ? "Missing ALT" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
                         </span>
                       </div>
                       <input
@@ -2286,9 +2294,7 @@ export default function ImageAltOptimizer() {
                           setDraftFileAlts((prev) => ({ ...prev, [f.id]: gen }));
                         }}
                         style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
-                      >
-                        ✨ Filename
-                      </button>
+                      ><span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconFileText size={12} /> Filename</span></button>
 
                       {isDirty && (
                         <button
@@ -2297,7 +2303,7 @@ export default function ImageAltOptimizer() {
                           onClick={() => handleSaveFile(f.id)}
                           style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", padding: "7px 14px", fontSize: "12px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
                         >
-                          {isSavingThis ? "..." : "💾 Save"}
+                          {isSavingThis ? "..." : "Save"}
                         </button>
                       )}
                     </div>
@@ -2313,7 +2319,7 @@ export default function ImageAltOptimizer() {
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             {filteredCollections.length === 0 ? (
               <div style={{ background: "#ffffff", padding: "60px 20px", textAlign: "center", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: "36px", marginBottom: "10px" }}>📁</div>
+                <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}><IconFolder size={38} color="#94a3b8" /></div>
                 <div style={{ fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>No collections with banner images found.</div>
                 <p style={{ fontSize: "13px", color: "#64748b", margin: "6px auto 0 auto", maxWidth: "450px" }}>
                   Add a collection image in your Shopify Admin under <strong>Products &rarr; Collections</strong> to optimize its banner ALT tag here.
@@ -2345,7 +2351,7 @@ export default function ImageAltOptimizer() {
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                         <span style={{ fontSize: "11px", fontWeight: "700", color: "#475569" }}>Collection Banner ALT:</span>
                         <span style={{ fontSize: "11px", fontWeight: "700", color: isMissing ? "#ea580c" : len <= ALT_WARN ? "#16a34a" : isOpt ? "#d97706" : "#dc2626" }}>
-                          {isMissing ? "⚠️ Missing ALT" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
+                          {isMissing ? "Missing ALT" : `${len} / ${ALT_MAX} chars ${isOpt ? "✓" : "(Too long)"}`}
                         </span>
                       </div>
                       <input
@@ -2365,9 +2371,7 @@ export default function ImageAltOptimizer() {
                           setDraftCollectionAlts((prev) => ({ ...prev, [c.id]: gen }));
                         }}
                         style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "6px", padding: "7px 12px", fontSize: "12px", fontWeight: "700", color: "#2563eb", cursor: "pointer" }}
-                      >
-                        ✨ AI Suggest
-                      </button>
+                      ><span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconSparkles size={12} /> AI Suggest</span></button>
 
                       {isDirty && (
                         <button
@@ -2376,7 +2380,7 @@ export default function ImageAltOptimizer() {
                           onClick={() => handleSaveCollection(c)}
                           style={{ background: isSavingThis ? "#94a3b8" : "#16a34a", color: "#ffffff", border: "none", borderRadius: "6px", padding: "7px 14px", fontSize: "12px", fontWeight: "700", cursor: isSavingThis ? "wait" : "pointer" }}
                         >
-                          {isSavingThis ? "..." : "💾 Save"}
+                          {isSavingThis ? "..." : "Save"}
                         </button>
                       )}
                     </div>
@@ -2393,7 +2397,7 @@ export default function ImageAltOptimizer() {
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
           <div style={{ background: "#ffffff", borderRadius: "12px", padding: "24px", maxWidth: "460px", width: "100%", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>🔍 Find & Replace in Selected ({selectedFileIds.length})</h3>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>Find & Replace in Selected ({selectedFileIds.length})</h3>
               <button type="button" onClick={() => setShowFindReplaceModal(false)} style={{ background: "transparent", border: "none", fontSize: "16px", cursor: "pointer", color: "#64748b" }}>✕</button>
             </div>
 
@@ -2446,7 +2450,7 @@ export default function ImageAltOptimizer() {
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "20px" }}>
           <div style={{ background: "#ffffff", borderRadius: "12px", padding: "24px", maxWidth: "460px", width: "100%", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>🏷️ Add Prefix or Suffix ({selectedFileIds.length})</h3>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "800", color: "#0f172a" }}>Add Prefix or Suffix ({selectedFileIds.length})</h3>
               <button type="button" onClick={() => setShowPrefixSuffixModal(false)} style={{ background: "transparent", border: "none", fontSize: "16px", cursor: "pointer", color: "#64748b" }}>✕</button>
             </div>
 

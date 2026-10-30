@@ -3,6 +3,20 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useLoaderData, useNavigation, Link } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import {
+  IconBox,
+  IconZap,
+  IconSparkles,
+  IconSave,
+  IconRefresh,
+  IconCheckCircle,
+  IconAlertTriangle,
+  IconSearch,
+  IconTag,
+  IconImage,
+  IconBot,
+  IconCheck
+} from "../components/Icons";
 import { authenticate } from "../shopify.server";
 import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
 import {
@@ -184,8 +198,8 @@ export default function SeoOptimizer() {
       const res = await fetch("/api/sync-metafield", { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        if (shopify?.toast) shopify.toast.show("✅ Metafield definition synced to multiline text!");
-        alert("✅ Successfully synced Shopify Metafield definition to multiline text (multi_line_text_field)!");
+        if (shopify?.toast) shopify.toast.show("Metafield definition synced to multiline text!");
+        alert("Successfully synced Shopify Metafield definition to multiline text (multi_line_text_field)!");
       } else {
         alert(
           data.result?.error ||
@@ -254,7 +268,7 @@ export default function SeoOptimizer() {
       });
     });
     setImageDrafts((prev) => ({ ...prev, ...newDrafts }));
-    if (shopify?.toast) shopify.toast.show("✨ Generated Image ALT texts!");
+    if (shopify?.toast) shopify.toast.show("Generated Image ALT texts!");
   };
 
   // Save Image ALTs for current selected product
@@ -285,7 +299,7 @@ export default function SeoOptimizer() {
             return upd ? { ...m, alt: upd.alt } : m;
           }),
         }));
-        if (shopify?.toast) shopify.toast.show("✓ Image ALT texts saved to Shopify!");
+        if (shopify?.toast) shopify.toast.show("Image ALT texts saved to Shopify!");
       } else {
         alert("Failed to save image ALTs: " + (data.error || "Unknown error"));
       }
@@ -338,7 +352,7 @@ export default function SeoOptimizer() {
       productDescription: selectedProduct.description,
     });
     setKeywordsList(extracted);
-    if (shopify?.toast) shopify.toast.show(`✨ Auto-extracted ${extracted.length} keywords!`);
+    if (shopify?.toast) shopify.toast.show(`Auto-extracted ${extracted.length} keywords!`);
   }, [selectedProduct, shopify]);
 
   const handleGenerateAI = () => {
@@ -365,9 +379,9 @@ export default function SeoOptimizer() {
       setIsGenerating(false);
       setFeedbackMessage({
         type: "info",
-        text: `✨ Generated SEO Title, Meta Description, and ${generatedKeywords.length} Target Keywords! Review below, then click 'Save SEO & Keywords to Shopify Store'.`,
+        text: `Generated SEO Title, Meta Description, and ${generatedKeywords.length} Target Keywords! Review below, then click 'Save SEO & Keywords to Shopify Store'.`,
       });
-      if (shopify?.toast) shopify.toast.show(`✨ Generated SEO & ${generatedKeywords.length} Target Keywords!`);
+      if (shopify?.toast) shopify.toast.show(`Generated SEO & ${generatedKeywords.length} Target Keywords!`);
     }, 300);
   };
 
@@ -393,11 +407,11 @@ export default function SeoOptimizer() {
             data.keywordsError ||
             "Store Target SEO Keywords definition is currently locked to single-line list.";
           alert(
-            `⚠️ Partial Save: Saved Title & Meta Description, but target keywords could not be saved.\n\nReason: ${reason}\n\nTo fix in 10 seconds:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
+            `Partial Save: Saved Title & Meta Description, but target keywords could not be saved.\n\nReason: ${reason}\n\nTo fix in 10 seconds:\n1. Open Shopify Admin → Settings → Custom data → Products\n2. Click "Target SEO Keywords" and click Delete\n3. Return here and click "Force Sync Metafield".`
           );
           setFeedbackMessage({
             type: "warning",
-            text: `⚠️ Saved Title & Description, but keywords failed: ${reason}`,
+            text: `Saved Title & Description, but keywords failed: ${reason}`,
           });
         } else {
           // Update local product cache
@@ -407,20 +421,20 @@ export default function SeoOptimizer() {
 
           setFeedbackMessage({
             type: "success",
-            text: `✅ Saved successfully! Title, description, and ${keywordsList.length} comma-separated keywords saved to Shopify multiline metafield.`,
+            text: `Saved successfully! Title, description, and ${keywordsList.length} comma-separated keywords saved to Shopify multiline metafield.`,
           });
-          if (shopify?.toast) shopify.toast.show("✅ Saved SEO & Keywords to Shopify!");
+          if (shopify?.toast) shopify.toast.show("Saved SEO & Keywords to Shopify!");
         }
       } else {
         setFeedbackMessage({
           type: "error",
-          text: `❌ Error: ${data.error || "Failed to update Shopify"}`,
+          text: `Error: ${data.error || "Failed to update Shopify"}`,
         });
       }
     } catch (err) {
       setFeedbackMessage({
         type: "error",
-        text: `❌ Network error: ${err.message || "Failed to contact API"}`,
+        text: `Network error: ${err.message || "Failed to contact API"}`,
       });
     } finally {
       setIsSaving(false);
@@ -428,7 +442,7 @@ export default function SeoOptimizer() {
   };
 
   return (
-    <s-page full-width heading="⚡ Single Product SEO & Keywords Optimizer">
+    <s-page full-width heading="Single Product SEO & Keywords Optimizer">
       <style>{`
         s-page {
           display: block;
@@ -453,7 +467,7 @@ export default function SeoOptimizer() {
             <s-box padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="base">
                 <s-stack direction="inline" align="space-between" align-items="center">
-                  <s-text font-weight="bold" font-size="medium">📦 1. Search & Select Product</s-text>
+                  <s-text font-weight="bold" font-size="medium">1. Search & Select Product</s-text>
                   <button
                     type="button"
                     onClick={handleSyncMetafield}
@@ -469,7 +483,7 @@ export default function SeoOptimizer() {
                       cursor: isSyncingMeta ? "wait" : "pointer",
                     }}
                   >
-                    {isSyncingMeta ? "⏳ Syncing Metafield..." : "🔄 Force Sync Metafield"}
+                    {isSyncingMeta ? "Syncing Metafield..." : "Force Sync Metafield"}
                   </button>
                 </s-stack>
 
@@ -490,7 +504,7 @@ export default function SeoOptimizer() {
                   >
                     <div>
                       <div style={{ fontSize: "11px", fontWeight: "700", color: "#166534", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        ✓ Currently Selected Product
+                        Currently Selected Product
                       </div>
                       <div style={{ fontSize: "17px", fontWeight: "800", color: "#0f172a", marginTop: "2px" }}>
                         {selectedProduct.title}
@@ -517,7 +531,7 @@ export default function SeoOptimizer() {
                           color: "#334155",
                         }}
                       >
-                        🔍 Change Product
+                        Change Product
                       </button>
                       <button
                         type="button"
@@ -533,7 +547,7 @@ export default function SeoOptimizer() {
                           color: "#dc2626",
                         }}
                       >
-                        ✕ Clear Selection
+                        Clear Selection
                       </button>
                     </div>
                   </div>
@@ -542,7 +556,7 @@ export default function SeoOptimizer() {
                 <div style={{ position: "relative" }}>
                   <input
                     type="text"
-                    placeholder={selectedProduct ? "Search another product by title..." : "🔍 Search and click a product to optimize..."}
+                    placeholder={selectedProduct ? "Search another product by title..." : "Search and click a product to optimize..."}
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
@@ -620,7 +634,7 @@ export default function SeoOptimizer() {
                 {/* Step 2: AI Generator & Keywords Controls */}
                 <s-box padding="base" borderWidth="base" borderRadius="base">
                   <s-stack direction="block" gap="base">
-                    <s-text font-weight="bold" font-size="medium">🤖 2. Target Keywords & AI Generator Controls</s-text>
+                    <s-text font-weight="bold" font-size="medium">2. Target Keywords & AI Generator Controls</s-text>
 
                     {/* Target Keywords Tags Manager */}
                     <div>
@@ -640,7 +654,7 @@ export default function SeoOptimizer() {
                             cursor: "pointer",
                           }}
                         >
-                          🤖 Auto-Suggest Keywords
+                          Auto-Suggest Keywords
                         </button>
                       </div>
 
@@ -676,7 +690,7 @@ export default function SeoOptimizer() {
                                 border: "1px solid #bae6fd",
                               }}
                             >
-                              <span>🏷️ {kw}</span>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><IconTag size={12} /> {kw}</span>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveKeyword(kw)}
@@ -770,7 +784,7 @@ export default function SeoOptimizer() {
                       disabled={isGenerating}
                       {...(isGenerating ? { loading: true } : {})}
                     >
-                      {isGenerating ? "✨ Generating AI SEO & Keywords..." : `✨ Generate AI SEO & Keywords (Title ≤ ${TITLE_MAX} / Description ≤ ${DESC_MAX})`}
+                      {isGenerating ? "Generating AI SEO & Keywords..." : `Generate AI SEO & Keywords (Title ≤ ${TITLE_MAX} / Description ≤ ${DESC_MAX})`}
                     </s-button>
                   </s-stack>
                 </s-box>
@@ -779,7 +793,7 @@ export default function SeoOptimizer() {
                 <s-box padding="base" borderWidth="base" borderRadius="base">
                   <s-stack direction="block" gap="base">
                     <s-stack direction="inline" align="space-between" align-items="center">
-                      <s-text font-weight="bold" font-size="medium">🔍 3. Live Google Snippet & SEO Health Check</s-text>
+                      <s-text font-weight="bold" font-size="medium">3. Live Google Snippet & SEO Health Check</s-text>
                       <div style={{ background: seoAnalysis.score >= 80 ? "#e3f8e0" : "#fff4e5", color: seoAnalysis.score >= 80 ? "#108043" : "#b7791f", padding: "6px 14px", borderRadius: "16px", fontWeight: "bold", fontSize: "14px" }}>
                         SEO Score: {seoAnalysis.score} / 100
                       </div>
@@ -824,13 +838,13 @@ export default function SeoOptimizer() {
                       <div>
                         <s-text-field label={`SEO Title (${seoAnalysis.titleLen} / ${TITLE_MAX} chars max)`} value={seoTitle} onChange={(e) => setSeoTitle(e.currentTarget.value)}></s-text-field>
                         <div style={{ fontSize: "12px", marginTop: "2px", fontWeight: "600", color: seoAnalysis.titleOk ? "#108043" : "#d9381e" }}>
-                          {seoAnalysis.titleOk ? `✓ Within limit: ${seoAnalysis.titleLen} chars (max ${TITLE_MAX})` : `⚠️ Over limit: ${seoAnalysis.titleLen} chars (must be ${TITLE_MAX} or less)`}
+                          {seoAnalysis.titleOk ? `✓ Within limit: ${seoAnalysis.titleLen} chars (max ${TITLE_MAX})` : `Over limit: ${seoAnalysis.titleLen} chars (must be ${TITLE_MAX} or less)`}
                         </div>
                       </div>
                       <div>
                         <s-text-field label={`Meta Description (${seoAnalysis.descLen} / ${DESC_MAX} chars max)`} value={seoDescription} onChange={(e) => setSeoDescription(e.currentTarget.value)}></s-text-field>
                         <div style={{ fontSize: "12px", marginTop: "2px", fontWeight: "600", color: seoAnalysis.descOk ? "#108043" : "#d9381e" }}>
-                          {seoAnalysis.descOk ? `✓ Within limit: ${seoAnalysis.descLen} chars (max ${DESC_MAX})` : `⚠️ Over limit: ${seoAnalysis.descLen} chars (must be ${DESC_MAX} or less)`}
+                          {seoAnalysis.descOk ? `✓ Within limit: ${seoAnalysis.descLen} chars (max ${DESC_MAX})` : `Over limit: ${seoAnalysis.descLen} chars (must be ${DESC_MAX} or less)`}
                         </div>
                       </div>
 
@@ -838,7 +852,7 @@ export default function SeoOptimizer() {
                       <div style={{ fontSize: "12px", color: seoAnalysis.hasKw ? "#108043" : "#b7791f", fontWeight: "600" }}>
                         {seoAnalysis.hasKw
                           ? `✓ ${keywordsList.length} Target Keywords attached (will save as Shopify comma-separated multiline Metafield)`
-                          : "⚠️ No target keywords specified (optional, but recommended for better ranking)"}
+                          : "No target keywords specified (optional, but recommended for better ranking)"}
                       </div>
                     </s-stack>
 
@@ -847,7 +861,7 @@ export default function SeoOptimizer() {
                       disabled={isSaving || !seoTitle}
                       {...(isSaving ? { loading: true } : {})}
                     >
-                      {isSaving ? "Saving to Shopify..." : "💾 Save SEO & Keywords to Shopify Store"}
+                      {isSaving ? "Saving to Shopify..." : "Save SEO & Keywords to Shopify Store"}
                     </s-button>
                   </s-stack>
                 </s-box>
@@ -895,7 +909,7 @@ export default function SeoOptimizer() {
                       <>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", background: "#f1f5f9", padding: "10px 14px", borderRadius: "8px" }}>
                           <span style={{ fontSize: "12px", fontWeight: "700", color: "#334155" }}>
-                            🖼️ {selectedProduct.media.length} Product Images
+                            {selectedProduct.media.length} Product Images
                           </span>
 
                           <div style={{ display: "flex", gap: "8px" }}>
@@ -913,7 +927,7 @@ export default function SeoOptimizer() {
                                 cursor: "pointer",
                               }}
                             >
-                              ✨ Auto-Generate All Images
+                              Auto-Generate All Images
                             </button>
 
                             <button
@@ -931,7 +945,7 @@ export default function SeoOptimizer() {
                                 cursor: isSavingImages ? "wait" : "pointer",
                               }}
                             >
-                              {isSavingImages ? "Saving..." : "💾 Save Image ALTs"}
+                              {isSavingImages ? "Saving..." : "Save Image ALTs"}
                             </button>
                           </div>
                         </div>
@@ -996,7 +1010,7 @@ export default function SeoOptimizer() {
                                         color: isMissing ? "#ea580c" : isOptimal ? "#16a34a" : "#dc2626",
                                       }}
                                     >
-                                      {isMissing ? "⚠️ Empty" : `${len} / ${ALT_MAX} chars ${isOptimal ? "✓" : "(Too long)"}`}
+                                      {isMissing ? "Empty" : `${len} / ${ALT_MAX} chars ${isOptimal ? "✓" : "(Too long)"}`}
                                     </span>
                                   </div>
 
@@ -1044,7 +1058,7 @@ export default function SeoOptimizer() {
                                     cursor: "pointer",
                                   }}
                                 >
-                                  ✨ Suggest
+                                  Suggest
                                 </button>
                               </div>
                             );
@@ -1058,7 +1072,7 @@ export default function SeoOptimizer() {
             ) : (
               <s-box padding="base" borderWidth="base" borderRadius="base">
                 <div style={{ textAlign: "center", padding: "40px 20px" }}>
-                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>📦</div>
+                  <div style={{ marginBottom: "14px", display: "flex", justifyContent: "center" }}><IconBox size={42} color="#94a3b8" /></div>
                   <div style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a", marginBottom: "8px" }}>
                     No Product Selected
                   </div>
@@ -1069,7 +1083,7 @@ export default function SeoOptimizer() {
                   {products.length > 0 && (
                     <div style={{ maxWidth: "600px", margin: "0 auto" }}>
                       <div style={{ fontSize: "12px", fontWeight: "600", color: "#64748b", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        ⚡ Quick Select a Product:
+                        Quick Select a Product:
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
                         {products.slice(0, 5).map((p) => (
@@ -1089,7 +1103,7 @@ export default function SeoOptimizer() {
                               transition: "all 0.15s ease",
                             }}
                           >
-                            🛍️ {p.title}
+                            {p.title}
                           </button>
                         ))}
                       </div>

@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLoaderData, useNavigate, useNavigation, useSearchParams, redirect, Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { IconBox, IconFolder, IconFileText, IconArticle, IconImage, IconArrowRight } from "../components/Icons";
 import { authenticate } from "../shopify.server";
 import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
 import { fitComplete } from "../lib/seoCopy";
@@ -601,7 +602,7 @@ export default function BulkOptimizer() {
   }, []);
 
   return (
-    <s-page inline-size="large" inlineSize="large" full-width heading="🚀 1-Click Bulk SEO Optimizer">
+    <s-page inline-size="large" inlineSize="large" full-width heading="1-Click Bulk SEO Optimizer">
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -740,7 +741,7 @@ export default function BulkOptimizer() {
             to="/app/image-alt-optimizer"
             style={{ background: "#f1f5f9", color: "#334155", padding: "6px 12px", borderRadius: "6px", textDecoration: "none", fontSize: "12px", fontWeight: "600" }}
           >
-            🖼️ Image ALT Optimizer →
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconImage size={15} /> Image ALT Optimizer <IconArrowRight size={13} /></span>
           </Link>
         </div>
       </div>
@@ -779,7 +780,7 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <span>📦</span> Products ({pagination.totalCount || products.length})
+          <IconBox size={16} /> Products ({pagination.totalCount || products.length})
         </button>
 
         <button
@@ -803,7 +804,7 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <span>📁</span> Collections ({collections.length})
+          <IconFolder size={16} /> Collections ({collections.length})
         </button>
 
         <button
@@ -827,7 +828,7 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <span>📄</span> Pages ({pages.length})
+          <IconFileText size={16} /> Pages ({pages.length})
         </button>
 
         <button
@@ -851,7 +852,7 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <span>📝</span> Blog Posts ({articles.length})
+          <IconArticle size={16} /> Blog Posts ({articles.length})
         </button>
       </div>
 

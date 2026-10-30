@@ -136,7 +136,7 @@ export default function DemoPage() {
       }).map((item) => ({ title: item.title, desc: item.description }));
       setAiVariations(vars);
       setIsGenerating(false);
-      setToastMessage("✨ AI SEO variations generated successfully!");
+      setToastMessage(" AI SEO variations generated successfully!");
       setTimeout(() => setToastMessage(null), 3000);
     }, 600);
   };
@@ -160,7 +160,7 @@ export default function DemoPage() {
       seoTitle,
       seoDescription,
     });
-    setToastMessage("💾 Saved to Demo Catalog! SEO Health Score updated.");
+    setToastMessage(" Saved to Demo Catalog! SEO Health Score updated.");
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -212,7 +212,7 @@ export default function DemoPage() {
 
     setBulkProposals(newProposals);
     setIsBulkGenerating(false);
-    setToastMessage(`⚡ Batch AI generation complete for ${targets.length} products!`);
+    setToastMessage(` Batch AI generation complete for ${targets.length} products!`);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -240,7 +240,7 @@ export default function DemoPage() {
     });
 
     setProducts(updated);
-    setToastMessage("🎉 All batch proposals applied! Store SEO Health Score increased to 100%!");
+    setToastMessage(" All batch proposals applied! Store SEO Health Score increased to 100%!");
     setActiveTab("overview"); // Auto-switch to health overview so visitor sees the 100% score!
     setTimeout(() => setToastMessage(null), 5000);
   };
@@ -277,7 +277,7 @@ export default function DemoPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "16px" }}>🌟</span>
+          <span style={{ fontSize: "16px" }}></span>
           <span style={{ fontWeight: "700", color: "#34d399" }}>LIVE DEMO SANDBOX</span>
           <span style={{ opacity: 0.8 }}>&bull; You are testing real-time AI SEO features with simulated store data.</span>
         </div>
@@ -333,7 +333,7 @@ export default function DemoPage() {
               fontWeight: "700",
             }}
           >
-            ⚡
+            
           </div>
           <div>
             <div style={{ fontSize: "16px", fontWeight: "700", color: "#202223" }}>
@@ -361,7 +361,7 @@ export default function DemoPage() {
               boxShadow: activeTab === "overview" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
             }}
           >
-            📊 Store SEO Health
+             Store SEO Health
           </button>
           <button
             onClick={() => setActiveTab("optimizer")}
@@ -377,7 +377,7 @@ export default function DemoPage() {
               boxShadow: activeTab === "optimizer" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
             }}
           >
-            ⚡ Single Optimizer
+             Single Optimizer
           </button>
           <button
             onClick={() => setActiveTab("bulk")}
@@ -396,7 +396,7 @@ export default function DemoPage() {
               gap: "6px",
             }}
           >
-            <span>🚀 1-Click Bulk Tool</span>
+            <span> 1-Click Bulk Tool</span>
             <span style={{ fontSize: "10px", background: "#10b981", color: "#ffffff", padding: "1px 5px", borderRadius: "8px" }}>NEW</span>
           </button>
         </div>
@@ -458,10 +458,10 @@ export default function DemoPage() {
                   Demo Boutique Official
                 </div>
                 <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>
-                  🌐 demo-boutique.myshopify.com &bull; 🏷️ Shopify Advanced Plan
+                   demo-boutique.myshopify.com &bull;  Shopify Advanced Plan
                 </div>
                 <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                  📦 {stats.total} Products in catalog &bull; Real-time SEO sync active
+                   {stats.total} Products in catalog &bull; Real-time SEO sync active
                 </div>
               </div>
 
@@ -484,7 +484,7 @@ export default function DemoPage() {
                 </div>
                 <div style={{ fontSize: "13px", opacity: 0.85 }}>/ 100</div>
                 <div style={{ fontSize: "12px", marginTop: "6px", fontWeight: "600" }}>
-                  {stats.score >= 80 ? "🟢 Excellent" : stats.score >= 50 ? "🟡 Needs Work" : "🔴 Critical"}
+                  {stats.score >= 80 ? " Excellent" : stats.score >= 50 ? " Needs Work" : " Critical"}
                 </div>
               </div>
             </div>
@@ -499,25 +499,25 @@ export default function DemoPage() {
               }}
             >
               <div style={{ background: "#ffffff", padding: "20px", borderRadius: "10px", border: "1px solid #e1e3e5", textAlign: "center" }}>
-                <div style={{ fontSize: "28px" }}>📦</div>
+                <div style={{ fontSize: "28px" }}></div>
                 <div style={{ fontSize: "28px", fontWeight: "800", color: "#202223" }}>{stats.total}</div>
                 <div style={{ fontSize: "13px", color: "#6d7175" }}>Total Products</div>
               </div>
 
               <div style={{ background: "#ffffff", padding: "20px", borderRadius: "10px", border: "1px solid #e1e3e5", textAlign: "center" }}>
-                <div style={{ fontSize: "28px" }}>🏷️</div>
+                <div style={{ fontSize: "28px" }}></div>
                 <div style={{ fontSize: "28px", fontWeight: "800", color: "#202223" }}>{stats.withTitle} / {stats.total}</div>
                 <div style={{ fontSize: "13px", color: "#6d7175" }}>With SEO Titles</div>
               </div>
 
               <div style={{ background: "#ffffff", padding: "20px", borderRadius: "10px", border: "1px solid #e1e3e5", textAlign: "center" }}>
-                <div style={{ fontSize: "28px" }}>📝</div>
+                <div style={{ fontSize: "28px" }}></div>
                 <div style={{ fontSize: "28px", fontWeight: "800", color: "#202223" }}>{stats.withDesc} / {stats.total}</div>
                 <div style={{ fontSize: "13px", color: "#6d7175" }}>With Meta Descriptions</div>
               </div>
 
               <div style={{ background: "#ffffff", padding: "20px", borderRadius: "10px", border: "1px solid #e1e3e5", textAlign: "center" }}>
-                <div style={{ fontSize: "28px" }}>🎯</div>
+                <div style={{ fontSize: "28px" }}></div>
                 <div style={{ fontSize: "28px", fontWeight: "800", color: scoreColor }}>{stats.optimalTitle + stats.optimalDesc}</div>
                 <div style={{ fontSize: "13px", color: "#6d7175" }}>Strict SERP Clamped</div>
               </div>
@@ -540,7 +540,7 @@ export default function DemoPage() {
             >
               <div>
                 <div style={{ fontSize: "16px", fontWeight: "800", color: "#ffffff" }}>
-                  🚀 Want to optimize all {stats.total} products in 10 seconds?
+                   Want to optimize all {stats.total} products in 10 seconds?
                 </div>
                 <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "2px" }}>
                   Run the 1-Click Bulk Optimizer to generate and apply all missing tags in batch.
@@ -580,7 +580,7 @@ export default function DemoPage() {
                     cursor: "pointer",
                   }}
                 >
-                  ⚡ Open Single Optimizer
+                   Open Single Optimizer
                 </button>
               </div>
 
@@ -603,10 +603,10 @@ export default function DemoPage() {
                         <tr key={p.id} style={{ borderBottom: "1px solid #f1f2f4" }}>
                           <td style={{ padding: "12px 10px", fontWeight: "600" }}>{p.title}</td>
                           <td style={{ padding: "12px 10px", color: hasTitle ? "#202223" : "#ef4444" }}>
-                            {hasTitle ? `${p.seoTitle.slice(0, 30)}... (${p.seoTitle.length} chars)` : "❌ Missing"}
+                            {hasTitle ? `${p.seoTitle.slice(0, 30)}... (${p.seoTitle.length} chars)` : " Missing"}
                           </td>
                           <td style={{ padding: "12px 10px", color: hasDesc ? "#202223" : "#ef4444" }}>
-                            {hasDesc ? `${p.seoDescription.slice(0, 35)}... (${p.seoDescription.length} chars)` : "❌ Missing"}
+                            {hasDesc ? `${p.seoDescription.slice(0, 35)}... (${p.seoDescription.length} chars)` : " Missing"}
                           </td>
                           <td style={{ padding: "12px 10px" }}>
                             <span
@@ -657,7 +657,7 @@ export default function DemoPage() {
             {/* Left Column: Product Selection & AI Controls */}
             <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e1e3e5", padding: "24px" }}>
               <h2 style={{ fontSize: "18px", fontWeight: "800", margin: "0 0 16px 0" }}>
-                ⚡ Product SEO Optimizer
+                 Product SEO Optimizer
               </h2>
 
               {/* Product Selector Dropdown */}
@@ -713,8 +713,8 @@ export default function DemoPage() {
                       >
                         <div style={{ fontWeight: "600" }}>{p.title}</div>
                         <div style={{ fontSize: "11px", color: "#6d7175" }}>
-                          {p.seoTitle ? `Title: ${p.seoTitle.slice(0, 25)}...` : "⚠️ Missing Title"} &bull;{" "}
-                          {p.seoDescription ? "✓ Has Description" : "⚠️ Missing Description"}
+                          {p.seoTitle ? `Title: ${p.seoTitle.slice(0, 25)}...` : " Missing Title"} &bull;{" "}
+                          {p.seoDescription ? "✓ Has Description" : " Missing Description"}
                         </div>
                       </div>
                     ))}
@@ -791,7 +791,7 @@ export default function DemoPage() {
                   boxShadow: "0 2px 8px rgba(0, 128, 96, 0.3)",
                 }}
               >
-                {isGenerating ? "🤖 Generating Perfect Meta Tags..." : "✨ Generate AI SERP Variations"}
+                {isGenerating ? " Generating Perfect Meta Tags..." : " Generate AI SERP Variations"}
               </button>
 
               {/* AI Variations Preview */}
@@ -839,7 +839,7 @@ export default function DemoPage() {
               <div style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e1e3e5", padding: "24px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "18px" }}>🔍</span>
+                    <span style={{ fontSize: "18px" }}></span>
                     <span style={{ fontSize: "15px", fontWeight: "700" }}>Google SERP Snippet Preview</span>
                   </div>
                   <div style={{ display: "flex", gap: "6px", background: "#f1f2f4", padding: "2px", borderRadius: "6px" }}>
@@ -856,7 +856,7 @@ export default function DemoPage() {
                         boxShadow: devicePreview === "desktop" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
                       }}
                     >
-                      🖥️ Desktop
+                       Desktop
                     </button>
                     <button
                       onClick={() => setDevicePreview("mobile")}
@@ -871,7 +871,7 @@ export default function DemoPage() {
                         boxShadow: devicePreview === "mobile" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
                       }}
                     >
-                      📱 Mobile
+                       Mobile
                     </button>
                   </div>
                 </div>
@@ -902,7 +902,7 @@ export default function DemoPage() {
                         fontSize: "10px",
                       }}
                     >
-                      🛍️
+                      
                     </div>
                     <div>
                       <div style={{ fontSize: "12px", color: "#202124", fontWeight: "500" }}>Demo Boutique</div>
@@ -948,7 +948,7 @@ export default function DemoPage() {
                         color: isTitleOptimal ? "#108043" : titleLength > 60 ? "#d9381e" : "#b7791f",
                       }}
                     >
-                      {titleLength}/{TITLE_MAX} chars {isTitleOptimal ? `✓ Within limit (max ${TITLE_MAX})` : titleLength > TITLE_MAX ? "⚠️ Over limit" : "(Add a title)"}
+                      {titleLength}/{TITLE_MAX} chars {isTitleOptimal ? `✓ Within limit (max ${TITLE_MAX})` : titleLength > TITLE_MAX ? " Over limit" : "(Add a title)"}
                     </span>
                   </div>
                   <input
@@ -977,7 +977,7 @@ export default function DemoPage() {
                         color: isDescOptimal ? "#108043" : descLength > 160 ? "#d9381e" : "#b7791f",
                       }}
                     >
-                      {descLength}/{DESC_MAX} chars {isDescOptimal ? `✓ Within limit (max ${DESC_MAX})` : descLength > DESC_MAX ? "⚠️ Over limit" : "(Add a description)"}
+                      {descLength}/{DESC_MAX} chars {isDescOptimal ? `✓ Within limit (max ${DESC_MAX})` : descLength > DESC_MAX ? " Over limit" : "(Add a description)"}
                     </span>
                   </div>
                   <textarea
@@ -1013,7 +1013,7 @@ export default function DemoPage() {
                     boxShadow: "0 2px 6px rgba(0, 128, 96, 0.2)",
                   }}
                 >
-                  💾 Save to Demo Store & Update Health Score
+                   Save to Demo Store & Update Health Score
                 </button>
               </div>
             </div>
@@ -1064,7 +1064,7 @@ export default function DemoPage() {
                       boxShadow: selectedBulkIds.size > 0 ? "0 2px 10px rgba(16,185,129,0.35)" : "none",
                     }}
                   >
-                    {isBulkGenerating ? "🤖 Generating..." : `⚡ Start AI Generation (${selectedBulkIds.size} Selected)`}
+                    {isBulkGenerating ? " Generating..." : ` Start AI Generation (${selectedBulkIds.size} Selected)`}
                   </button>
 
                   {Object.keys(bulkProposals).length > 0 && (
@@ -1082,7 +1082,7 @@ export default function DemoPage() {
                         boxShadow: "0 2px 10px rgba(2,132,199,0.35)",
                       }}
                     >
-                      💾 Apply All Proposals to Demo Catalog
+                       Apply All Proposals to Demo Catalog
                     </button>
                   )}
                 </div>
@@ -1142,7 +1142,7 @@ export default function DemoPage() {
               {isBulkGenerating && (
                 <div style={{ marginTop: "16px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#34d399" }}>
-                    <span>🤖 Processing catalog with AI SERP engine...</span>
+                    <span> Processing catalog with AI SERP engine...</span>
                     <span>{bulkProgress.current} / {bulkProgress.total} ({bulkProgress.percentage}%)</span>
                   </div>
                   <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "8px", height: "8px", overflow: "hidden" }}>
@@ -1262,7 +1262,7 @@ export default function DemoPage() {
                             ) : (
                               <div>
                                 <div style={{ color: p.seoTitle ? "#202223" : "#d9381e", fontSize: "12px" }}>
-                                  {p.seoTitle || "❌ Missing Title"}
+                                  {p.seoTitle || " Missing Title"}
                                 </div>
                                 {p.seoTitle && (
                                   <div style={{ fontSize: "11px", color: isTitleGood ? "#108043" : "#6d7175", marginTop: "2px" }}>
@@ -1297,7 +1297,7 @@ export default function DemoPage() {
                             ) : (
                               <div>
                                 <div style={{ color: p.seoDescription ? "#4a4a4a" : "#d9381e", fontSize: "12px", lineHeight: "1.4" }}>
-                                  {p.seoDescription ? `${p.seoDescription.slice(0, 60)}...` : "❌ Missing Description"}
+                                  {p.seoDescription ? `${p.seoDescription.slice(0, 60)}...` : " Missing Description"}
                                 </div>
                                 {p.seoDescription && (
                                   <div style={{ fontSize: "11px", color: isDescGood ? "#108043" : "#6d7175", marginTop: "2px" }}>

@@ -1,6 +1,14 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 import { useState, useMemo, useEffect } from "react";
 import {
+  IconZap,
+  IconSparkles,
+  IconSave,
+  IconCheckCircle,
+  IconAlertTriangle,
+  IconRefresh,
+} from "./Icons";
+import {
   TITLE_MAX,
   DESC_MAX,
   isTitleOk,
@@ -111,7 +119,7 @@ export function BulkResourceTable({
 
     setDrafts(newDrafts);
     setIsGenerating(false);
-    onNotify?.(`✨ Generated SEO & Keywords for ${targetItems.length} items! Review & click "Save to Shopify".`);
+    onNotify?.(`Generated SEO & Keywords for ${targetItems.length} items! Review & click "Save to Shopify".`);
   };
 
   const handleSave = async (itemsToSave) => {
@@ -183,7 +191,7 @@ export function BulkResourceTable({
     }
 
     setIsSaving(false);
-    onNotify?.(`🎉 Successfully saved ${savedCount} items to Shopify!`);
+    onNotify?.(`Successfully saved ${savedCount} items to Shopify!`);
   };
 
   const dirtyItems = items.filter(isDirty);
@@ -270,7 +278,7 @@ export function BulkResourceTable({
                 transition: "all 0.15s ease",
               }}
             >
-              ⚡ Generate for Selected ({selectedIds.size})
+              <IconZap size={14} color="currentColor" /> Generate for Selected ({selectedIds.size})
             </button>
 
             <button
@@ -293,7 +301,7 @@ export function BulkResourceTable({
                 transition: "all 0.15s ease",
               }}
             >
-              ✨ 1-Click: Generate All Missing ({stats.missingTitle + stats.missingDesc})
+              <IconSparkles size={14} color="#ffffff" /> 1-Click: Generate All Missing ({stats.missingTitle + stats.missingDesc})
             </button>
 
             {dirtyItems.length > 0 && (
@@ -318,8 +326,8 @@ export function BulkResourceTable({
                 }}
               >
                 {isSaving
-                  ? `💾 Saving (${saveProgress.current}/${saveProgress.total})...`
-                  : `💾 Save ${dirtyItems.length} to Shopify`}
+                  ? `Saving (${saveProgress.current}/${saveProgress.total})...`
+                  : `Save ${dirtyItems.length} to Shopify`}
               </button>
             )}
           </div>
@@ -331,7 +339,7 @@ export function BulkResourceTable({
         <div style={{ flex: "1 1 300px", maxWidth: "460px" }}>
           <input
             type="text"
-            placeholder={`🔍 Search ${categoryLabel.toLowerCase()} by title or keyword...`}
+            placeholder={`Search ${categoryLabel.toLowerCase()} by title or keyword...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
@@ -349,9 +357,9 @@ export function BulkResourceTable({
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {[
             { id: "all", label: `All (${stats.total})` },
-            { id: "missing-title", label: `⚠️ Missing Title (${stats.missingTitle})`, warn: stats.missingTitle > 0 },
-            { id: "missing-desc", label: `⚠️ Missing Description (${stats.missingDesc})`, warn: stats.missingDesc > 0 },
-            { id: "optimized", label: `✅ Optimized (${stats.optimized})` },
+            { id: "missing-title", label: `Missing Title (${stats.missingTitle})`, warn: stats.missingTitle > 0 },
+            { id: "missing-desc", label: `Missing Description (${stats.missingDesc})`, warn: stats.missingDesc > 0 },
+            { id: "optimized", label: `Optimized (${stats.optimized})` },
           ].map((f) => {
             const isSel = filterMode === f.id;
             return (
@@ -634,7 +642,7 @@ export function BulkResourceTable({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          💾 Unsaved
+                          Unsaved
                         </span>
                       ) : titleLen > 0 && descLen > 0 && titleLen <= TITLE_MAX && descLen <= DESC_MAX ? (
                         <span
@@ -650,7 +658,7 @@ export function BulkResourceTable({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          ✅ Optimized
+                          Optimized
                         </span>
                       ) : (
                         <span
@@ -666,7 +674,7 @@ export function BulkResourceTable({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          ⚠️ Missing
+                          Missing
                         </span>
                       )}
                     </td>
