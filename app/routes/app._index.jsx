@@ -1179,6 +1179,71 @@ export default function Dashboard() {
 
 
 
+      {/* Homepage & Special Pages SEO Guide */}
+      <s-section heading="🏠 Homepage & Storewide SEO Guide">
+        <div
+          style={{
+            background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+            borderRadius: "14px",
+            border: "1px solid #e2e8f0",
+            padding: "24px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: "20px",
+          }}
+        >
+          <div style={{ background: "#ffffff", padding: "18px 20px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "20px" }}>🏠</span>
+              <span style={{ fontWeight: "800", fontSize: "14px", color: "#0f172a" }}>Homepage Title & Description</span>
+            </div>
+            <p style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.5", margin: "0 0 12px" }}>
+              Shopify controls your homepage title and meta description directly in Online Store Preferences.
+            </p>
+            {shopDomain ? (
+              <a
+                href={`https://${shopDomain}/admin/online_store/preferences`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: "#0284c7",
+                  color: "#ffffff",
+                  padding: "7px 12px",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                ⚙️ Open Store Preferences ↗
+              </a>
+            ) : null}
+          </div>
+
+          <div style={{ background: "#ffffff", padding: "18px 20px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "20px" }}>🏷️</span>
+              <span style={{ fontWeight: "800", fontSize: "14px", color: "#0f172a" }}>Homepage Meta Keywords</span>
+            </div>
+            <p style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.5", margin: 0 }}>
+              Our Theme Extension renders <code>&lt;meta name="keywords"&gt;</code> on your homepage using the <code>shop.metafields.seo.keywords</code> definition. Set it under Settings &rarr; Custom data &rarr; Shop.
+            </p>
+          </div>
+
+          <div style={{ background: "#ffffff", padding: "18px 20px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "20px" }}>📑</span>
+              <span style={{ fontWeight: "800", fontSize: "14px", color: "#0f172a" }}>/collections/all & /blogs/news</span>
+            </div>
+            <p style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.5", margin: 0 }}>
+              To optimize <code>/collections/all</code>, create an automated collection with URL handle <code>all</code>. To optimize <code>/blogs/news</code>, edit the blog under Online Store &rarr; Blog posts &rarr; Manage blogs.
+            </p>
+          </div>
+        </div>
+      </s-section>
       {/* Page Loading Overlay */}
       {isPageLoading && (
         <div
