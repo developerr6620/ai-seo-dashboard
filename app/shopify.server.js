@@ -19,8 +19,6 @@ const shopify = shopifyApp({
   apiVersion: ApiVersion.July26,
   scopes: process.env.SCOPES?.split(",") || [
     "write_products",
-    "write_metaobjects",
-    "write_metaobject_definitions",
     "write_files",
     "write_content",
   ],

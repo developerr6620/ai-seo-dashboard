@@ -3,7 +3,7 @@ import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
   const { scopes, session } = await authenticate.admin(request);
-  const shop = session?.shop || "develops-test-store.myshopify.com";
+  const shop = session?.shop || "";
 
   if (scopes?.request) {
     try {
@@ -18,7 +18,7 @@ export const loader = async ({ request }) => {
   // Direct OAuth authorize URL to prompt Shopify permission screen
   const appUrl = process.env.SHOPIFY_APP_URL || "https://seooptimizer.zooq.app";
   const clientId = process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148";
-  const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${clientId}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent(appUrl + "/auth/callback")}`;
+  const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${clientId}&scope=write_products,write_files,write_content&redirect_uri=${encodeURIComponent(appUrl + "/auth/callback")}`;
 
   return redirect(authUrl);
 };

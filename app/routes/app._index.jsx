@@ -272,7 +272,8 @@ export const loader = async ({ request }) => {
       articlesCount,
       contentScopeError,
       shopDomain: shop.myshopifyDomain || shopName,
-      clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
+      clientId: process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148",
+      appUrl: process.env.SHOPIFY_APP_URL || "https://seooptimizer.zooq.app",
       // Global comprehensive score
       globalSeoScore,
       seoBreakdown: {
@@ -307,7 +308,8 @@ export const loader = async ({ request }) => {
       articlesCount: 0,
       contentScopeError: false,
       shopDomain: "",
-      clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
+      clientId: process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148",
+      appUrl: process.env.SHOPIFY_APP_URL || "https://seooptimizer.zooq.app",
       globalSeoScore: 0,
       seoBreakdown: { products: null, collections: null, pages: null, articles: null, altTags: null },
     };
@@ -324,7 +326,8 @@ export default function Dashboard() {
     articlesCount: initialArticlesCount = 0,
     contentScopeError = false,
     shopDomain = "",
-    clientId = "cdeb2fd429e5b0cceb3d43906b7f2148",
+    clientId = "",
+    appUrl = "https://seooptimizer.zooq.app",
     isAuditing: initialIsAuditing,
     lastAuditedAt: initialLastAudit,
     globalSeoScore: initialGlobalScore = 0,
@@ -344,7 +347,7 @@ export default function Dashboard() {
   const articlesCount = initialArticlesCount;
   const [dashToast, setDashToast] = useState(null);
 
-  const reauthUrl = `https://${shopDomain || "develops-test-store.myshopify.com"}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://seooptimizer.zooq.app/auth/callback")}`;
+  const reauthUrl = shopDomain ? `https://${shopDomain}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_files,write_content&redirect_uri=${encodeURIComponent((appUrl || "https://seooptimizer.zooq.app") + "/auth/callback")}` : "#";
 
   // Poll for audit completion if background scan is in progress
   useEffect(() => {

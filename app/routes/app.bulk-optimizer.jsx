@@ -43,7 +43,9 @@ export const loader = async ({ request }) => {
 
   // If user requested to grant/update missing scopes
   if (url.searchParams.get("grant_scopes") === "1") {
-    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=cdeb2fd429e5b0cceb3d43906b7f2148&scope=write_products,write_metaobjects,write_metaobject_definitions,write_files,write_content&redirect_uri=${encodeURIComponent("https://seooptimizer.zooq.app/auth/callback")}`;
+        const appUrl = process.env.SHOPIFY_APP_URL || "https://seooptimizer.zooq.app";
+    const clientId = process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148";
+    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${clientId}&scope=write_products,write_files,write_content&redirect_uri=${encodeURIComponent(appUrl + "/auth/callback")}`;
     return redirect(authUrl);
   }
 
@@ -462,7 +464,7 @@ export const loader = async ({ request }) => {
     return {
       shop: shopInfo,
       shopDomain: shop,
-      clientId: "cdeb2fd429e5b0cceb3d43906b7f2148",
+      clientId: process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148",
       products,
       collections,
       pages,
@@ -507,7 +509,7 @@ export default function BulkOptimizer() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const shop = loaderData?.shop || { name: "Your Store" };
-  const shopDomain = loaderData?.shopDomain || "develops-test-store.myshopify.com";
+  const shopDomain = loaderData?.shopDomain || "";
   const clientId = loaderData?.clientId || "cdeb2fd429e5b0cceb3d43906b7f2148";
   const collections = loaderData?.collections || [];
   const pages = loaderData?.pages || [];
