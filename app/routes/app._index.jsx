@@ -96,7 +96,7 @@ export const loader = async ({ request }) => {
     const currentShop = shopName || shop.myshopifyDomain || "default-store";
     const auditResult = await getStoreAuditStats(admin, currentShop, totalProducts, sampleProducts);
 
-    // 3. Fetch collections SEO
+    // 3. Fetch collections SEO & banners
     let collectionsCount = 0;
     let collectionSeoData = [];
     try {
@@ -108,6 +108,10 @@ export const loader = async ({ request }) => {
                 id
                 seo { title description }
                 keywordsMetafield: metafield(namespace: "seo", key: "keywords") { value }
+                image {
+                  url
+                  altText
+                }
               }
             }
           }
@@ -247,7 +251,7 @@ export const loader = async ({ request }) => {
     const pageCat = catScore(pageSeoData);
     const articleCat = catScore(articleSeoData);
 
-    // Alt tag score
+    // Alt tag score: evaluate product images and collection banner images
     let totalImages = 0;
     let imagesWithAlt = 0;
     for (const p of sampleProducts) {
@@ -255,7 +259,15 @@ export const loader = async ({ request }) => {
       totalImages += imgs.length;
       imagesWithAlt += imgs.filter((img) => img.altText && img.altText.trim().length > 0).length;
     }
-    const altScore = totalImages > 0 ? Math.round((imagesWithAlt / totalImages) * 100) : null;
+    for (const c of collectionSeoData) {
+      if (c.image?.url) {
+        totalImages += 1;
+        if (c.image?.altText && c.image.altText.trim().length > 0) {
+          imagesWithAlt += 1;
+        }
+      }
+    }
+    const altScore = totalImages > 0 ? Math.round((imagesWithAlt / totalImages) * 100) : 100;
 
     // 7. Weighted global score
     const weights = [

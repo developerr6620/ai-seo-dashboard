@@ -534,71 +534,221 @@ export default function ImageAltOptimizer() {
   };
 
   // ==========================================
-  // BULK ACTIONS HANDLERS (STORE FILES)
+  // BULK ACTIONS HANDLERS
   // ==========================================
-  // 1-Click: Auto-fill clean filename & batch-save ALL missing store files directly to Shopify
+  // 1-Click: Auto-fill & batch-save ALL missing images directly to Shopify across all tabs
   const handleAutoFillAndSaveAllMissing = async () => {
-    const missingFiles = files.filter((f) => !getFileAlt(f.id, f.alt).trim());
-    if (missingFiles.length === 0) {
-      if (shopify?.toast) shopify.toast.show("No missing ALT tags to optimize!");
+    setIsBatchSaving(true);
+    setFeedback(null);
+
+    // 1. Collection Banners
+    if (activeTab === "collections") {
+      const missingCollections = collections.filter((c) => !getCollectionAlt(c.id, c.alt).trim());
+      if (missingCollections.length === 0) {
+        setIsBatchSaving(false);
+        if (shopify?.toast) shopify.toast.show("No missing Collection ALT tags to optimize!");
+        return;
+      }
+      setBatchProgress({ current: 0, total: missingCollections.length });
+
+      const generatedItems = missingCollections.map((c) => ({
+        id: c.id,
+        altText: generateCollectionAltText({
+          collectionTitle: c.title,
+          storeName: shop.name,
+          template: collectionTemplate,
+        }),
+        imageUrl: c.url,
+      }));
+
+      const draftsUpdate = {};
+      generatedItems.forEach((item) => {
+        draftsUpdate[item.id] = item.altText;
+      });
+      setDraftCollectionAlts((prev) => ({ ...prev, ...draftsUpdate }));
+
+      const CHUNK = 5;
+      let savedCount = 0;
+      for (let i = 0; i < generatedItems.length; i += CHUNK) {
+        const chunk = generatedItems.slice(i, i + CHUNK);
+        try {
+          const res = await fetch("/api/save-image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceType: "collection", items: chunk }),
+          });
+          const d = await res.json();
+          if (d.success && d.updatedCount > 0) {
+            savedCount += d.updatedCount;
+            setCollections((prev) =>
+              prev.map((col) => {
+                const match = chunk.find((m) => m.id === col.id);
+                return match ? { ...col, alt: match.altText } : col;
+              })
+            );
+          }
+        } catch (e) {
+          console.error("1-Click Collection Save error:", e);
+        }
+        setBatchProgress({ current: Math.min(i + CHUNK, generatedItems.length), total: generatedItems.length });
+      }
+
+      setIsBatchSaving(false);
+      if (savedCount > 0) {
+        setFeedback({
+          type: "success",
+          message: `Successfully generated & saved ${savedCount} Collection Banner ALT tags to Shopify!`,
+        });
+        if (shopify?.toast) shopify.toast.show(`Saved ${savedCount} Collection Banners!`);
+      } else {
+        setFeedback({
+          type: "error",
+          message: "Failed to save collection banner ALT tags to Shopify. Please try again.",
+        });
+      }
       return;
     }
 
-    setIsBatchSaving(true);
-    setFeedback(null);
-    setBatchProgress({ current: 0, total: missingFiles.length });
+    // 2. Product Images
+    if (activeTab === "products") {
+      const itemsToUpdate = [];
+      const draftsUpdate = {};
 
-    // Generate clean filename ALT text for each missing file
-    const generatedItems = missingFiles.map((f) => ({
-      id: f.id,
-      alt: generateStoreFileAltText({
-        filename: f.filename,
-        url: f.url,
-        storeName: shop.name,
-        template: fileTemplate,
-      }),
-    }));
+      products.forEach((p) => {
+        const missingMedia = p.media
+          .map((m, idx) => ({ m, idx }))
+          .filter(({ m }) => !getProductAlt(m.id, m.alt).trim());
 
-    // Update drafts immediately so user sees them in UI
-    const draftsUpdate = {};
-    generatedItems.forEach((item) => {
-      draftsUpdate[item.id] = item.alt;
-    });
-    setDraftFileAlts((prev) => ({ ...prev, ...draftsUpdate }));
-
-    // Batch save to Shopify in chunks of 20
-    const CHUNK = 20;
-    let savedCount = 0;
-    for (let i = 0; i < generatedItems.length; i += CHUNK) {
-      const chunk = generatedItems.slice(i, i + CHUNK);
-      try {
-        const res = await fetch("/api/save-image-alt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resourceType: "file", files: chunk }),
-        });
-        const d = await res.json();
-        if (d.success) {
-          savedCount += d.updatedCount || chunk.length;
-          setFiles((prev) =>
-            prev.map((f) => {
-              const match = chunk.find((item) => item.id === f.id);
-              return match ? { ...f, alt: match.alt } : f;
-            })
-          );
+        if (missingMedia.length > 0) {
+          const generatedMedia = missingMedia.map(({ m, idx }) => {
+            const genAlt = generateImageAltText({
+              productTitle: p.title,
+              keyword: p.keywords?.[idx % (p.keywords.length || 1)] || "",
+              keywords: p.keywords,
+              brand: p.vendor,
+              storeName: shop.name,
+              imageIndex: idx,
+              totalImages: p.media.length,
+              template: productTemplate,
+            });
+            draftsUpdate[m.id] = genAlt;
+            return { id: m.id, alt: genAlt };
+          });
+          itemsToUpdate.push({ productId: p.id, media: generatedMedia });
         }
-      } catch (e) {
-        console.error("1-Click Bulk Save error:", e);
+      });
+
+      if (itemsToUpdate.length === 0) {
+        setIsBatchSaving(false);
+        if (shopify?.toast) shopify.toast.show("No missing Product Image ALT tags to optimize!");
+        return;
       }
-      setBatchProgress({ current: Math.min(i + CHUNK, generatedItems.length), total: generatedItems.length });
+
+      setDraftProductAlts((prev) => ({ ...prev, ...draftsUpdate }));
+      setBatchProgress({ current: 0, total: itemsToUpdate.length });
+
+      const CHUNK = 5;
+      let savedImagesCount = 0;
+      for (let i = 0; i < itemsToUpdate.length; i += CHUNK) {
+        const chunk = itemsToUpdate.slice(i, i + CHUNK);
+        try {
+          const res = await fetch("/api/save-image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceType: "product", items: chunk }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            savedImagesCount += d.updatedImagesCount || 0;
+            setProducts((prev) =>
+              prev.map((p) => {
+                const match = chunk.find((c) => c.productId === p.id);
+                if (!match) return p;
+                return {
+                  ...p,
+                  media: p.media.map((m) => {
+                    const sm = match.media.find((item) => item.id === m.id);
+                    return sm ? { ...m, alt: sm.alt } : m;
+                  }),
+                };
+              })
+            );
+          }
+        } catch (e) {
+          console.error("1-Click Product Save error:", e);
+        }
+        setBatchProgress({ current: Math.min(i + CHUNK, itemsToUpdate.length), total: itemsToUpdate.length });
+      }
+
+      setIsBatchSaving(false);
+      setFeedback({
+        type: "success",
+        message: `Successfully generated & saved ${savedImagesCount} Product Image ALT tags to Shopify!`,
+      });
+      if (shopify?.toast) shopify.toast.show(`Saved ${savedImagesCount} Product Images!`);
+      return;
     }
 
-    setIsBatchSaving(false);
-    setFeedback({
-      type: "success",
-      message: `Successfully generated & saved ${savedCount} ALT tags directly to Shopify Content → Files!`,
-    });
-    if (shopify?.toast) shopify.toast.show(`Saved ${savedCount} Store File ALT tags!`);
+    // 3. Store Files
+    if (activeTab === "files") {
+      const missingFiles = files.filter((f) => !getFileAlt(f.id, f.alt).trim());
+      if (missingFiles.length === 0) {
+        setIsBatchSaving(false);
+        if (shopify?.toast) shopify.toast.show("No missing ALT tags to optimize!");
+        return;
+      }
+
+      setBatchProgress({ current: 0, total: missingFiles.length });
+
+      const generatedItems = missingFiles.map((f) => ({
+        id: f.id,
+        alt: generateStoreFileAltText({
+          filename: f.filename,
+          url: f.url,
+          storeName: shop.name,
+          template: fileTemplate,
+        }),
+      }));
+
+      const draftsUpdate = {};
+      generatedItems.forEach((item) => {
+        draftsUpdate[item.id] = item.alt;
+      });
+      setDraftFileAlts((prev) => ({ ...prev, ...draftsUpdate }));
+
+      const CHUNK = 20;
+      let savedCount = 0;
+      for (let i = 0; i < generatedItems.length; i += CHUNK) {
+        const chunk = generatedItems.slice(i, i + CHUNK);
+        try {
+          const res = await fetch("/api/save-image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceType: "file", files: chunk }),
+          });
+          const d = await res.json();
+          if (d.success) {
+            savedCount += d.updatedCount || chunk.length;
+            setFiles((prev) =>
+              prev.map((f) => {
+                const match = chunk.find((item) => item.id === f.id);
+                return match ? { ...f, alt: match.alt } : f;
+              })
+            );
+          }
+        } catch (e) {
+          console.error("1-Click Bulk Save error:", e);
+        }
+        setBatchProgress({ current: Math.min(i + CHUNK, generatedItems.length), total: generatedItems.length });
+      }
+
+      setIsBatchSaving(false);
+      setFeedback({
+        type: "success",
+        message: `Successfully generated & saved ${savedCount} ALT tags directly to Shopify Content → Files!`,
+      });
+      if (shopify?.toast) shopify.toast.show(`Saved ${savedCount} Store File ALT tags!`);
+    }
   };
 
   // Apply clean filename to selected files
@@ -748,11 +898,13 @@ export default function ImageAltOptimizer() {
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.updatedCount > 0) {
         setCollections((prev) => prev.map((c) => (c.id === collection.id ? { ...c, alt: altText } : c)));
         if (shopify?.toast) shopify.toast.show("Collection Banner ALT text saved!");
       } else {
-        setFeedback({ type: "error", message: `Failed to save: ${data.error}` });
+        const errorMsg = data.errors?.map((e) => e.error).join(", ") || data.error || "Failed to update Shopify";
+        setFeedback({ type: "error", message: `Failed to save: ${errorMsg}` });
+        if (shopify?.toast) shopify.toast.show(`Error: ${errorMsg}`);
       }
     } catch (e) {
       setFeedback({ type: "error", message: `Error: ${e.message}` });
@@ -914,14 +1066,16 @@ export default function ImageAltOptimizer() {
             body: JSON.stringify({ resourceType: "collection", items: chunk }),
           });
           const d = await res.json();
-          if (d.success) {
-            saved += d.updatedCount || 0;
+          if (d.success && d.updatedCount > 0) {
+            saved += d.updatedCount;
             setCollections((prev) =>
               prev.map((col) => {
                 const match = chunk.find((item) => item.id === col.id);
                 return match ? { ...col, alt: match.altText } : col;
               })
             );
+          } else if (d.errors?.length > 0) {
+            console.error("Collection batch save errors:", d.errors);
           }
         } catch (e) {
           console.error("Collection batch error:", e);
@@ -930,8 +1084,13 @@ export default function ImageAltOptimizer() {
       }
 
       setIsBatchSaving(false);
-      setFeedback({ type: "success", message: `Successfully saved ${saved} Collection Banner ALT texts!` });
-      if (shopify?.toast) shopify.toast.show(`Saved ${saved} Collection Banner ALT texts!`);
+      if (saved > 0) {
+        setFeedback({ type: "success", message: `Successfully saved ${saved} Collection Banner ALT texts to Shopify!` });
+        if (shopify?.toast) shopify.toast.show(`Saved ${saved} Collection Banner ALT texts!`);
+      } else {
+        setFeedback({ type: "error", message: `Failed to save Collection Banner ALT texts to Shopify. Please check permissions or connection.` });
+        if (shopify?.toast) shopify.toast.show("Failed to save Collection Banners");
+      }
     }
   };
 
@@ -1190,7 +1349,7 @@ export default function ImageAltOptimizer() {
             </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-              {activeTab === "files" && stats.missing > 0 && (
+              {stats.missing > 0 && (
                 <button
                   type="button"
                   disabled={isBatchSaving}

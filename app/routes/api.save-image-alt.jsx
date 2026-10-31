@@ -2,7 +2,7 @@ import { authenticate } from "../shopify.server";
 import { fitWords, ALT_MAX } from "../lib/imageAltCopy";
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   try {
     const data = await request.json();
@@ -70,7 +70,7 @@ export const action = async ({ request }) => {
       if (Array.isArray(data.items)) {
         collectionsToUpdate = data.items;
       } else if (data.collectionId) {
-        collectionsToUpdate = [{ id: data.collectionId, altText: data.altText, imageUrl: data.imageUrl }];
+        collectionsToUpdate = [{ id: data.collectionId, altText: data.altText, imageUrl: data.imageUrl || data.url }];
       }
 
       if (collectionsToUpdate.length === 0) {
@@ -100,36 +100,114 @@ export const action = async ({ request }) => {
 
       for (const col of collectionsToUpdate) {
         const alt = fitWords(col.altText || col.alt || "", ALT_MAX);
-        const input = {
-          id: col.id,
-          image: {
-            altText: alt,
-          },
-        };
-        // Preserve image src if available
-        if (col.imageUrl || col.src) {
-          input.image.src = col.imageUrl || col.src;
+        const numericId = (col.id || "").replace(/\D/g, "");
+        let savedSuccess = false;
+        let lastError = null;
+
+        // Clean image URL if provided (strip query parameters like ?v=...)
+        const rawUrl = col.imageUrl || col.url || col.src || "";
+        const cleanUrl = rawUrl ? rawUrl.split("?")[0] : "";
+
+        // Attempt 1: Try GraphQL collectionUpdate with cleaned URL
+        if (cleanUrl) {
+          try {
+            const input = {
+              id: col.id.startsWith("gid://") ? col.id : `gid://shopify/Collection/${col.id}`,
+              image: {
+                altText: alt,
+                src: cleanUrl,
+              },
+            };
+            const res = await admin.graphql(colMutation, { variables: { input } });
+            const resJson = await res.json();
+            const userErrors = resJson?.data?.collectionUpdate?.userErrors || [];
+
+            if (userErrors.length === 0 && resJson?.data?.collectionUpdate?.collection) {
+              savedSuccess = true;
+              updatedCount++;
+            } else if (userErrors.length > 0) {
+              lastError = userErrors.map((e) => e.message).join("; ");
+              console.warn(`[SaveImageAlt] GraphQL collectionUpdate failed for ${col.id}: ${lastError}`);
+            }
+          } catch (e) {
+            lastError = e.message;
+            console.warn(`[SaveImageAlt] GraphQL collectionUpdate exception for ${col.id}:`, e.message);
+          }
         }
 
-        try {
-          const res = await admin.graphql(colMutation, { variables: { input } });
-          const resJson = await res.json();
-          const userErrors = resJson?.data?.collectionUpdate?.userErrors || [];
+        // Attempt 2: Fallback to Shopify REST Admin API (custom_collections or smart_collections)
+        // REST directly updates the image's alt property without re-downloading or re-processing the image asset
+        if (!savedSuccess && numericId && session?.shop && session?.accessToken) {
+          try {
+            // First try custom_collections endpoint
+            const restUrlCustom = `https://${session.shop}/admin/api/2025-01/custom_collections/${numericId}.json`;
+            const customRes = await fetch(restUrlCustom, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": session.accessToken,
+              },
+              body: JSON.stringify({
+                custom_collection: {
+                  id: Number(numericId),
+                  image: {
+                    alt: alt,
+                  },
+                },
+              }),
+            });
 
-          if (userErrors.length > 0) {
-            errors.push({ id: col.id, error: userErrors.map((e) => e.message).join("; ") });
-          } else {
-            updatedCount++;
+            if (customRes.ok) {
+              savedSuccess = true;
+              updatedCount++;
+            } else if (customRes.status === 404) {
+              // 404 means this is a smart (automated) collection; update via smart_collections endpoint
+              const restUrlSmart = `https://${session.shop}/admin/api/2025-01/smart_collections/${numericId}.json`;
+              const smartRes = await fetch(restUrlSmart, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Shopify-Access-Token": session.accessToken,
+                },
+                body: JSON.stringify({
+                  smart_collection: {
+                    id: Number(numericId),
+                    image: {
+                      alt: alt,
+                    },
+                  },
+                }),
+              });
+
+              if (smartRes.ok) {
+                savedSuccess = true;
+                updatedCount++;
+              } else {
+                const errText = await smartRes.text();
+                lastError = `REST smart_collection failed (${smartRes.status}): ${errText}`;
+                console.error(`[SaveImageAlt] REST smart_collections error for ${col.id}:`, lastError);
+              }
+            } else {
+              const errText = await customRes.text();
+              lastError = `REST custom_collection failed (${customRes.status}): ${errText}`;
+              console.error(`[SaveImageAlt] REST custom_collections error for ${col.id}:`, lastError);
+            }
+          } catch (restErr) {
+            lastError = `REST exception: ${restErr.message}`;
+            console.error(`[SaveImageAlt] REST exception for ${col.id}:`, restErr);
           }
-        } catch (e) {
-          errors.push({ id: col.id, error: e.message });
+        }
+
+        if (!savedSuccess) {
+          errors.push({ id: col.id, error: lastError || "Failed to update collection banner ALT text" });
         }
       }
 
       return Response.json({
-        success: updatedCount > 0 || errors.length === 0,
+        success: updatedCount > 0,
         resourceType: "collection",
         updatedCount,
+        failedCount: errors.length,
         errors,
       });
     }
