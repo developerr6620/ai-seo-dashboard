@@ -61,59 +61,81 @@ export const loader = async ({ request }) => {
   let collections = [];
   let filesScopeError = false;
 
-  // 1. Fetch Products & Product Media
+  // 1. Fetch Products & Product Media (paginated to load all store products)
   try {
-    const prodRes = await admin.graphql(
-      `#graphql
-      query getProductsWithMedia {
-        shop {
-          name
-          myshopifyDomain
-        }
-        products(first: 100) {
-          edges {
-            cursor
-            node {
-              id
-              title
-              handle
-              status
-              vendor
-              keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
-                value
-              }
-              media(first: 20) {
-                nodes {
-                  id
-                  alt
-                  mediaContentType
-                  status
-                  preview {
-                    image {
-                      url
-                      width
-                      height
+    let hasNextPage = true;
+    let cursor = null;
+    let rawProducts = [];
+    let pageCount = 0;
+    const MAX_PRODUCT_PAGES = 5; // Load up to 1,250 products (250 per page)
+
+    while (hasNextPage && pageCount < MAX_PRODUCT_PAGES) {
+      pageCount++;
+      const prodRes = await admin.graphql(
+        `#graphql
+        query getProductsWithMedia($cursor: String) {
+          shop {
+            name
+            myshopifyDomain
+          }
+          products(first: 250, after: $cursor) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            edges {
+              cursor
+              node {
+                id
+                title
+                handle
+                status
+                vendor
+                keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
+                  value
+                }
+                media(first: 20) {
+                  nodes {
+                    id
+                    alt
+                    mediaContentType
+                    status
+                    preview {
+                      image {
+                        url
+                        width
+                        height
+                      }
                     }
-                  }
-                  ... on MediaImage {
-                    image {
-                      url
+                    ... on MediaImage {
+                      image {
+                        url
+                      }
                     }
                   }
                 }
               }
             }
           }
-        }
-      }`
-    );
+        }`,
+        { variables: { cursor } }
+      );
 
-    const prodJson = await prodRes.json();
-    if (prodJson?.data?.shop) {
-      shop = prodJson.data.shop;
+      const prodJson = await prodRes.json();
+      if (prodJson?.data?.shop) {
+        shop = prodJson.data.shop;
+      }
+
+      const edges = prodJson?.data?.products?.edges || [];
+      for (const e of edges) {
+        if (e.node) rawProducts.push(e.node);
+      }
+
+      const pageInfo = prodJson?.data?.products?.pageInfo;
+      hasNextPage = Boolean(pageInfo?.hasNextPage);
+      cursor = pageInfo?.endCursor || null;
+      if (!cursor) break;
     }
-
-    const rawProducts = prodJson?.data?.products?.edges?.map((e) => e.node) || [];
     products = rawProducts.map((p) => {
       const mediaNodes = (p.media?.nodes || [])
         .filter((m) => m.mediaContentType === "IMAGE" || !m.mediaContentType)

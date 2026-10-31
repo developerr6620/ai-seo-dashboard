@@ -405,9 +405,10 @@ export default function Dashboard() {
 
   const reauthUrl = `https://${shopDomain}/admin/oauth/authorize?client_id=${clientId}&scope=write_products,write_files,write_content&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}`;
 
-  // Semi-circle gauge calculations (radius 52, perimeter ~163.36)
-  const arcPerimeter = 163.36;
-  const strokeOffset = arcPerimeter - (arcPerimeter * Math.min(Math.max(globalSeoScore || 0, 0), 100)) / 100;
+  // Full 360-degree circular gauge calculations (radius 40, perimeter 2 * PI * 40 ≈ 251.33)
+  const circleRadius = 40;
+  const circleCircumference = 2 * Math.PI * circleRadius; // ~251.327
+  const strokeOffset = circleCircumference - (circleCircumference * Math.min(Math.max(globalSeoScore || 0, 0), 100)) / 100;
   const gaugeColor = globalSeoScore >= 80 ? "#10b981" : globalSeoScore >= 50 ? "#f59e0b" : "#ef4444";
 
   const formattedDate = lastAudit
@@ -706,51 +707,52 @@ export default function Dashboard() {
                 padding: "8px 0",
               }}
             >
-              {/* Semicircular Gauge */}
+              {/* Full Round 360 Circular Progress Gauge */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-                <div style={{ position: "relative", width: "134px", height: "78px" }}>
-                  <svg width="134" height="78" viewBox="0 0 140 85">
-                    {/* Background Arc */}
-                    <path
-                      d="M 18 75 A 52 52 0 0 1 122 75"
+                <div style={{ position: "relative", width: "108px", height: "108px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="108" height="108" viewBox="0 0 100 100" style={{ transform: "rotate(-90deg)" }}>
+                    {/* Background Track Circle */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r={circleRadius}
                       fill="none"
-                      stroke="#e2e8f0"
-                      strokeWidth="11"
-                      strokeLinecap="round"
+                      stroke="#f1f5f9"
+                      strokeWidth="9"
                     />
-                    {/* Progress Arc */}
-                    <path
-                      d="M 18 75 A 52 52 0 0 1 122 75"
+                    {/* Progress Circle */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r={circleRadius}
                       fill="none"
                       stroke={gaugeColor}
-                      strokeWidth="11"
+                      strokeWidth="9"
                       strokeLinecap="round"
-                      strokeDasharray={arcPerimeter}
+                      strokeDasharray={circleCircumference}
                       strokeDashoffset={strokeOffset}
-                      style={{ transition: "stroke-dashoffset 0.8s ease" }}
+                      style={{ transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)" }}
                     />
-                    {/* Center Score */}
-                    <text
-                      x="70"
-                      y="60"
-                      textAnchor="middle"
-                      fontSize="32"
-                      fontWeight="900"
-                      fill="#0f172a"
-                    >
-                      {globalSeoScore}
-                    </text>
-                    <text
-                      x="70"
-                      y="75"
-                      textAnchor="middle"
-                      fontSize="11"
-                      fontWeight="700"
-                      fill="#94a3b8"
-                    >
-                      /100
-                    </text>
                   </svg>
+                  {/* Centered Score */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    <span style={{ fontSize: "28px", fontWeight: "900", color: "#0f172a", lineHeight: 1 }}>
+                      {globalSeoScore}
+                    </span>
+                    <span style={{ fontSize: "11px", fontWeight: "700", color: "#94a3b8", marginTop: "3px" }}>
+                      /100
+                    </span>
+                  </div>
                 </div>
                 <div
                   style={{
@@ -764,7 +766,7 @@ export default function Dashboard() {
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "6px",
-                    marginTop: "6px",
+                    marginTop: "8px",
                   }}
                 >
                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "currentColor" }} />
