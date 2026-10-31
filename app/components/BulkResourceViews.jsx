@@ -7,6 +7,11 @@ import {
   IconCheckCircle,
   IconAlertTriangle,
   IconRefresh,
+  IconSearch,
+  IconBox,
+  IconFolder,
+  IconFileText,
+  IconArticle,
 } from "./Icons";
 import {
   TITLE_MAX,
@@ -21,9 +26,11 @@ import {
 } from "../lib/seoCopy";
 
 /**
- * Unified, spacious, distraction-free Bulk Resource Table component.
- * Powers Products, Collections, Pages, and Blog Articles with 100% identical design,
- * colors, generous spacing, dedicated keywords column, and table interactions.
+ * Unified, clean, modern Bulk Resource Table component.
+ * Matches the reference design with compact spacing, light hero card,
+ * search with magnifying icon, filter pills, image thumbnails, clean editable fields,
+ * clear status badges, and compact pagination (< 1 2 3 4 5 >).
+ * Powers Products, Collections, Pages, and Blog Articles with 100% identical styling.
  */
 export function BulkResourceTable({
   resourceType,
@@ -49,6 +56,13 @@ export function BulkResourceTable({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+
+  // Reset to page 1 on filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterMode]);
 
   const getTitle = (item) => (drafts[item.id]?.seoTitle !== undefined ? drafts[item.id].seoTitle : item.seoTitle || "");
   const getDesc = (item) => (drafts[item.id]?.seoDescription !== undefined ? drafts[item.id].seoDescription : item.seoDescription || "");
@@ -83,6 +97,13 @@ export function BulkResourceTable({
       return true;
     });
   }, [items, searchQuery, filterMode, drafts]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedItems = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, safeCurrentPage, pageSize]);
 
   const stats = useMemo(() => {
     let missingTitle = 0;
@@ -120,6 +141,21 @@ export function BulkResourceTable({
     setDrafts(newDrafts);
     setIsGenerating(false);
     onNotify?.(`Generated SEO & Keywords for ${targetItems.length} items! Review & click "Save to Shopify".`);
+  };
+
+  const handleGenerateSingle = (item) => {
+    setIsGenerating(true);
+    const generated = generateFn(item, storeName);
+    setDrafts((prev) => ({
+      ...prev,
+      [item.id]: {
+        seoTitle: generated.title,
+        seoDescription: generated.description,
+        keywords: generated.keywords || [],
+      },
+    }));
+    setIsGenerating(false);
+    onNotify?.(`Generated AI SEO for "${item.title}". Click "Save to Shopify" to publish.`);
   };
 
   const handleSave = async (itemsToSave) => {
@@ -196,147 +232,240 @@ export function BulkResourceTable({
 
   const dirtyItems = items.filter(isDirty);
 
+  // Pagination page numbers helper
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    let start = Math.max(1, safeCurrentPage - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px", width: "100%" }}>
-      {/* Unified Executive Hero Card with Generous Spacing */}
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px", width: "100%" }}>
+      {/* 1. HERO CARD (Matching Reference Design: Light background, Icon box, action buttons & graphic) */}
       <div
         style={{
-          background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+          background: "linear-gradient(135deg, #f0f7ff 0%, #ffffff 50%, #f8fafc 100%)",
           borderRadius: "14px",
-          padding: "26px 30px",
-          color: "#ffffff",
-          boxShadow: "0 4px 16px rgba(15, 23, 42, 0.25)",
+          padding: "20px 24px",
+          border: "1px solid #dbeafe",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
           width: "100%",
           boxSizing: "border-box",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "20px" }}>
-          <div style={{ flex: "1 1 500px", maxWidth: "720px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "18px" }}>
+          {/* Left Info Column */}
+          <div style={{ flex: "1 1 420px", maxWidth: "680px" }}>
             <div
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
-                fontSize: "11px",
-                fontWeight: "700",
-                letterSpacing: "0.8px",
-                color: "#38bdf8",
+                fontSize: "10px",
+                fontWeight: "800",
+                letterSpacing: "0.6px",
+                color: "#2563eb",
                 textTransform: "uppercase",
-                background: "rgba(56, 189, 248, 0.12)",
-                border: "1px solid rgba(56, 189, 248, 0.3)",
-                padding: "4px 10px",
+                background: "#eff6ff",
+                border: "1px solid #dbeafe",
+                padding: "3px 10px",
                 borderRadius: "20px",
-                marginBottom: "12px",
+                marginBottom: "10px",
               }}
             >
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#38bdf8", display: "inline-block" }}></span>
-              {categoryLabel} SEO
+              {categoryLabel.toUpperCase()} SEO
             </div>
 
-            <h2
-              style={{
-                fontSize: "23px",
-                fontWeight: "800",
-                margin: "0 0 10px 0",
-                color: "#ffffff",
-                letterSpacing: "-0.2px",
-                lineHeight: "1.3",
-              }}
-            >
-              {title} ({stats.total} items)
-            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
+              <div
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "10px",
+                  background: "#eff6ff",
+                  border: "1px solid #dbeafe",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {resourceType === "collection" ? (
+                  <IconFolder size={22} color="#f59e0b" />
+                ) : resourceType === "page" ? (
+                  <IconFileText size={22} color="#8b5cf6" />
+                ) : resourceType === "article" ? (
+                  <IconArticle size={22} color="#10b981" />
+                ) : (
+                  <IconBox size={22} color="#2563eb" />
+                )}
+              </div>
+              <h2
+                style={{
+                  fontSize: "20px",
+                  fontWeight: "800",
+                  margin: 0,
+                  color: "#0f172a",
+                  letterSpacing: "-0.2px",
+                }}
+              >
+                {title} ({stats.total} items)
+              </h2>
+            </div>
 
-            <p
-              style={{
-                fontSize: "14px",
-                lineHeight: "1.6",
-                color: "#94a3b8",
-                margin: 0,
-              }}
-            >
+            <p style={{ fontSize: "13px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
               {description}
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              disabled={isGenerating || selectedIds.size === 0}
-              onClick={() => handleGenerate(items.filter((item) => selectedIds.has(item.id)))}
-              style={{
-                background: selectedIds.size > 0 ? "rgba(255, 255, 255, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                color: selectedIds.size > 0 ? "#ffffff" : "rgba(255, 255, 255, 0.4)",
-                border: "1px solid rgba(255, 255, 255, 0.2)",
-                borderRadius: "8px",
-                padding: "10px 16px",
-                fontSize: "12px",
-                fontWeight: "700",
-                cursor: selectedIds.size > 0 ? "pointer" : "not-allowed",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <IconZap size={14} color="currentColor" /> Generate for Selected ({selectedIds.size})
-            </button>
-
-            <button
-              type="button"
-              disabled={isGenerating}
-              onClick={() => handleGenerate(items.filter((item) => !getTitle(item).trim() || !getDesc(item).trim()))}
-              style={{
-                background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "8px",
-                padding: "10px 18px",
-                fontSize: "12px",
-                fontWeight: "800",
-                cursor: "pointer",
-                boxShadow: "0 2px 10px rgba(16, 185, 129, 0.35)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <IconSparkles size={14} color="#ffffff" /> 1-Click: Generate All Missing ({stats.missingTitle + stats.missingDesc})
-            </button>
-
-            {dirtyItems.length > 0 && (
+          {/* Right Action Buttons & Mini Graphic Illustration */}
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
               <button
                 type="button"
-                disabled={isSaving}
-                onClick={() => handleSave(dirtyItems)}
+                disabled={isGenerating || selectedIds.size === 0}
+                onClick={() => handleGenerate(items.filter((item) => selectedIds.has(item.id)))}
+                style={{
+                  background: "#ffffff",
+                  color: selectedIds.size > 0 ? "#0f172a" : "#94a3b8",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  padding: "9px 16px",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  cursor: selectedIds.size > 0 ? "pointer" : "not-allowed",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <IconZap size={14} color={selectedIds.size > 0 ? "#2563eb" : "#94a3b8"} />
+                <span>Generate for Selected ({selectedIds.size})</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isGenerating}
+                onClick={() => handleGenerate(items.filter((item) => !getTitle(item).trim() || !getDesc(item).trim()))}
                 style={{
                   background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                   color: "#ffffff",
                   border: "none",
                   borderRadius: "8px",
-                  padding: "10px 20px",
+                  padding: "9px 18px",
                   fontSize: "12px",
                   fontWeight: "800",
-                  cursor: isSaving ? "wait" : "pointer",
-                  boxShadow: "0 2px 10px rgba(37, 99, 235, 0.4)",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(37, 99, 235, 0.3)",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
                   transition: "all 0.15s ease",
                 }}
               >
-                {isSaving
-                  ? `Saving (${saveProgress.current}/${saveProgress.total})...`
-                  : `Save ${dirtyItems.length} to Shopify`}
+                <IconSparkles size={14} color="#ffffff" />
+                <span>1-Click Generate All Missing ({stats.missingTitle + stats.missingDesc})</span>
               </button>
-            )}
+
+              {dirtyItems.length > 0 && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => handleSave(dirtyItems)}
+                  style={{
+                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "9px 18px",
+                    fontSize: "12px",
+                    fontWeight: "800",
+                    cursor: isSaving ? "wait" : "pointer",
+                    boxShadow: "0 2px 8px rgba(16, 185, 129, 0.35)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <IconSave size={14} color="#ffffff" />
+                  <span>{isSaving ? `Saving (${saveProgress.current}/${saveProgress.total})...` : `Save ${dirtyItems.length} to Shopify`}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Mini Graphic Illustration */}
+            <div
+              style={{
+                position: "relative",
+                width: "105px",
+                height: "72px",
+                background: "linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%)",
+                borderRadius: "10px",
+                border: "1px solid #e2e8f0",
+                padding: "6px 8px",
+                boxSizing: "border-box",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#cbd5e1" }} />
+                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#cbd5e1" }} />
+                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#cbd5e1" }} />
+                <div style={{ flex: 1, height: "4px", background: "#ffffff", borderRadius: "2px", marginLeft: "4px", border: "1px solid #e2e8f0" }} />
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", height: "36px", padding: "0 4px" }}>
+                <div style={{ width: "10px", height: "18px", background: "#10b981", borderRadius: "2px 2px 0 0" }} />
+                <div style={{ width: "10px", height: "26px", background: "#3b82f6", borderRadius: "2px 2px 0 0" }} />
+                <div style={{ width: "10px", height: "36px", background: "#8b5cf6", borderRadius: "2px 2px 0 0" }} />
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  right: "-4px",
+                  top: "12px",
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "50%",
+                  background: "#ffffff",
+                  border: "1.5px solid #e2e8f0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <line x1="21" y1="21" x2="16.5" y2="16.5" />
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Unified Filter & Search Bar */}
+      {/* 2. SEARCH BAR & FILTER TABS (Clean and modern) */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", width: "100%" }}>
-        <div style={{ flex: "1 1 300px", maxWidth: "460px" }}>
+        {/* Search input with magnifying glass */}
+        <div style={{ position: "relative", flex: "1 1 320px", maxWidth: "460px" }}>
+          <div style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex", alignItems: "center" }}>
+            <IconSearch size={15} color="#94a3b8" />
+          </div>
           <input
             type="text"
             placeholder={`Search ${categoryLabel.toLowerCase()} by title or keyword...`}
@@ -344,21 +473,24 @@ export function BulkResourceTable({
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 14px",
+              padding: "9px 14px 9px 36px",
               borderRadius: "8px",
-              border: "1px solid #cbd5e1",
+              border: "1px solid #e2e8f0",
               fontSize: "13px",
               background: "#ffffff",
+              color: "#0f172a",
               boxSizing: "border-box",
+              outline: "none",
             }}
           />
         </div>
 
+        {/* Filter Pills */}
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {[
             { id: "all", label: `All (${stats.total})` },
-            { id: "missing-title", label: `Missing Title (${stats.missingTitle})`, warn: stats.missingTitle > 0 },
-            { id: "missing-desc", label: `Missing Description (${stats.missingDesc})`, warn: stats.missingDesc > 0 },
+            { id: "missing-title", label: `Missing Title (${stats.missingTitle})` },
+            { id: "missing-desc", label: `Missing Description (${stats.missingDesc})` },
             { id: "optimized", label: `Optimized (${stats.optimized})` },
           ].map((f) => {
             const isSel = filterMode === f.id;
@@ -369,14 +501,15 @@ export function BulkResourceTable({
                 onClick={() => setFilterMode(f.id)}
                 style={{
                   background: isSel ? "#0f172a" : "#ffffff",
-                  color: isSel ? "#ffffff" : f.warn ? "#ea580c" : "#475569",
-                  border: `1.5px solid ${isSel ? "#0f172a" : f.warn ? "#fdba74" : "#cbd5e1"}`,
-                  borderRadius: "7px",
-                  padding: "7px 13px",
+                  color: isSel ? "#ffffff" : "#64748b",
+                  border: `1px solid ${isSel ? "#0f172a" : "#e2e8f0"}`,
+                  borderRadius: "8px",
+                  padding: "7px 14px",
                   fontSize: "12px",
-                  fontWeight: "700",
+                  fontWeight: isSel ? "700" : "600",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
+                  boxShadow: isSel ? "0 1px 3px rgba(15,23,42,0.15)" : "none",
                 }}
               >
                 {f.label}
@@ -386,9 +519,9 @@ export function BulkResourceTable({
         </div>
       </div>
 
-      {/* Unified Select All Bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f8fafc", padding: "8px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", width: "100%", boxSizing: "border-box" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", fontWeight: "600", color: "#334155", cursor: "pointer" }}>
+      {/* 3. SELECT ALL FILTERED ROW */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 2px" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: "600", color: "#334155", cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id))}
@@ -400,8 +533,9 @@ export function BulkResourceTable({
                 setSelectedIds(new Set([...selectedIds].filter((id) => !fSet.has(id))));
               }
             }}
+            style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#2563eb" }}
           />
-          Select All Filtered ({filtered.length})
+          <span>Select All Filtered ({filtered.length})</span>
         </label>
 
         {selectedIds.size > 0 && (
@@ -415,38 +549,63 @@ export function BulkResourceTable({
         )}
       </div>
 
-      {/* Unified Table - Wide Max Width, 6 Columns */}
+      {/* 4. PRODUCT / RESOURCE TABLE */}
       <div
         style={{
           background: "#ffffff",
-          borderRadius: "10px",
+          borderRadius: "12px",
           border: "1px solid #e2e8f0",
           overflowX: "auto",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
           width: "100%",
           boxSizing: "border-box",
         }}
       >
         <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "13px" }}>
           <thead>
-            <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
-              <th style={{ width: "36px", padding: "10px 8px", textAlign: "center" }}></th>
-              <th style={{ width: "18%", minWidth: "140px", padding: "10px 12px" }}>{categoryLabel.slice(0, -1) || "Item"}</th>
-              <th style={{ width: "18%", minWidth: "140px", padding: "10px 12px" }}>SEO Title (Max {TITLE_MAX})</th>
-              <th style={{ width: "20%", minWidth: "150px", padding: "10px 12px" }}>Target Keywords</th>
-              <th style={{ width: "36%", minWidth: "220px", padding: "10px 12px" }}>SEO Description (Max {DESC_MAX})</th>
-              <th style={{ width: "80px", minWidth: "75px", padding: "10px 8px", textAlign: "center" }}>Status</th>
+            <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0", color: "#64748b" }}>
+              <th style={{ width: "38px", padding: "12px 10px", textAlign: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={paginatedItems.length > 0 && paginatedItems.every((item) => selectedIds.has(item.id))}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(new Set([...selectedIds, ...paginatedItems.map((item) => item.id)]));
+                    } else {
+                      const pSet = new Set(paginatedItems.map((item) => item.id));
+                      setSelectedIds(new Set([...selectedIds].filter((id) => !pSet.has(id))));
+                    }
+                  }}
+                  style={{ width: "15px", height: "15px", cursor: "pointer", accentColor: "#2563eb" }}
+                />
+              </th>
+              <th style={{ width: "22%", minWidth: "170px", padding: "12px 14px", fontSize: "11px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                {categoryLabel.toUpperCase().slice(0, -1) || "ITEM"}
+              </th>
+              <th style={{ width: "22%", minWidth: "160px", padding: "12px 14px", fontSize: "11px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                SEO Title (Max {TITLE_MAX})
+              </th>
+              <th style={{ width: "20%", minWidth: "150px", padding: "12px 14px", fontSize: "11px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                Target Keywords
+              </th>
+              <th style={{ width: "26%", minWidth: "210px", padding: "12px 14px", fontSize: "11px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                SEO Description (Max {DESC_MAX})
+              </th>
+              <th style={{ width: "85px", minWidth: "80px", padding: "12px 10px", textAlign: "center", fontSize: "11px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                Status
+              </th>
+              <th style={{ width: "42px", padding: "12px 8px", textAlign: "center" }}></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {paginatedItems.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
+                <td colSpan={7} style={{ padding: "40px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
                   No items match your current search/filter.
                 </td>
               </tr>
             ) : (
-              filtered.map((item) => {
+              paginatedItems.map((item) => {
                 const isSelected = selectedIds.has(item.id);
                 const titleVal = getTitle(item);
                 const descVal = getDesc(item);
@@ -461,10 +620,12 @@ export function BulkResourceTable({
                     key={item.id}
                     style={{
                       borderBottom: "1px solid #f1f5f9",
-                      background: isSelected ? "#f0fdf4" : dirty ? "#fefce8" : "transparent",
+                      background: isSelected ? "#f0fdf4" : dirty ? "#fefce8" : "#ffffff",
+                      transition: "background-color 0.1s ease",
                     }}
                   >
-                    <td style={{ padding: "10px 8px", verticalAlign: "top", textAlign: "center" }}>
+                    {/* Checkbox */}
+                    <td style={{ padding: "12px 10px", verticalAlign: "middle", textAlign: "center" }}>
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -474,19 +635,74 @@ export function BulkResourceTable({
                           else next.add(item.id);
                           setSelectedIds(next);
                         }}
+                        style={{ width: "15px", height: "15px", cursor: "pointer", accentColor: "#2563eb" }}
                       />
                     </td>
 
-                    {/* Column 2: Item Name & Handle */}
-                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
-                      <div style={{ fontWeight: "700", color: "#0f172a", lineHeight: "1.4" }}>{item.title}</div>
-                      {item.handle && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>/{item.handle}</div>}
-                      {item.blogTitle && <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>Blog: {item.blogTitle}</div>}
+                    {/* Catalog Product / Item Thumbnail & Name */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt=""
+                            style={{
+                              width: "44px",
+                              height: "44px",
+                              borderRadius: "8px",
+                              objectFit: "cover",
+                              border: "1px solid #e2e8f0",
+                              background: "#f8fafc",
+                              flexShrink: 0,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "44px",
+                              height: "44px",
+                              borderRadius: "8px",
+                              background: "#f1f5f9",
+                              border: "1px solid #e2e8f0",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#94a3b8",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {resourceType === "collection" ? (
+                              <IconFolder size={20} color="#94a3b8" />
+                            ) : resourceType === "page" ? (
+                              <IconFileText size={20} color="#94a3b8" />
+                            ) : resourceType === "article" ? (
+                              <IconArticle size={20} color="#94a3b8" />
+                            ) : (
+                              <IconBox size={20} color="#94a3b8" />
+                            )}
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0, overflow: "hidden" }}>
+                          <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "13px", lineHeight: "1.3", wordBreak: "break-word" }}>
+                            {item.title}
+                          </div>
+                          {item.handle && (
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px", wordBreak: "break-all" }}>
+                              /{item.handle}
+                            </div>
+                          )}
+                          {item.blogTitle && (
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
+                              Blog: {item.blogTitle}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
 
-                    {/* Column 3: SEO Title (made smaller) */}
-                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
-                      <div style={{ position: "relative" }}>
+                    {/* SEO Title Input */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                      <div>
                         <input
                           type="text"
                           value={titleVal}
@@ -504,20 +720,22 @@ export function BulkResourceTable({
                           placeholder={`SEO title (max ${TITLE_MAX})...`}
                           style={{
                             width: "100%",
-                            padding: "8px 10px",
+                            padding: "7px 10px",
                             fontSize: "12px",
                             borderRadius: "6px",
-                            border: `1px solid ${titleLen > TITLE_MAX ? "#ef4444" : "#cbd5e1"}`,
+                            border: `1px solid ${titleLen > TITLE_MAX ? "#ef4444" : "#e2e8f0"}`,
                             boxSizing: "border-box",
                             background: "#ffffff",
+                            color: "#0f172a",
+                            outline: "none",
                           }}
                         />
                         <div
                           style={{
-                            fontSize: "10px",
+                            fontSize: "11px",
                             fontWeight: "700",
-                            marginTop: "4px",
-                            color: titleLen === 0 ? "#94a3b8" : titleLen <= TITLE_MAX ? "#16a34a" : "#ef4444",
+                            marginTop: "3px",
+                            color: titleLen === 0 ? "#94a3b8" : titleLen <= TITLE_MAX ? "#10b981" : "#ef4444",
                           }}
                         >
                           {titleLen} / {TITLE_MAX} characters
@@ -525,9 +743,9 @@ export function BulkResourceTable({
                       </div>
                     </td>
 
-                    {/* Column 4: Target Keywords (Dedicated editable column for all resources) */}
-                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
-                      <div style={{ position: "relative" }}>
+                    {/* Target Keywords Input */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                      <div>
                         <input
                           type="text"
                           value={keywordsVal}
@@ -542,28 +760,30 @@ export function BulkResourceTable({
                               },
                             }))
                           }
-                          placeholder="e.g. handmade, organic, deals..."
+                          placeholder="e.g. fashion, cotton, premium..."
                           style={{
                             width: "100%",
-                            padding: "8px 10px",
+                            padding: "7px 10px",
                             fontSize: "12px",
                             borderRadius: "6px",
-                            border: "1px solid #cbd5e1",
+                            border: "1px solid #e2e8f0",
                             boxSizing: "border-box",
                             background: "#ffffff",
+                            color: "#0f172a",
+                            outline: "none",
                           }}
                         />
                         <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
                           {kwArray.length > 0 ? (
-                            kwArray.slice(0, 3).map((kw, i) => (
+                            kwArray.slice(0, 2).map((kw, i) => (
                               <span
                                 key={i}
                                 style={{
                                   fontSize: "10px",
-                                  background: "#f0f9ff",
-                                  color: "#0369a1",
-                                  border: "1px solid #bae6fd",
-                                  padding: "1px 5px",
+                                  background: "#eff6ff",
+                                  color: "#0284c7",
+                                  border: "1px solid #dbeafe",
+                                  padding: "1px 6px",
                                   borderRadius: "4px",
                                   fontWeight: "600",
                                 }}
@@ -572,22 +792,22 @@ export function BulkResourceTable({
                               </span>
                             ))
                           ) : (
-                            <span style={{ fontSize: "10px", color: "#94a3b8" }}>Comma-separated keywords</span>
+                            <span style={{ fontSize: "10px", color: "#94a3b8" }}>Target keywords</span>
                           )}
-                          {kwArray.length > 3 && (
+                          {kwArray.length > 2 && (
                             <span style={{ fontSize: "10px", color: "#64748b", fontWeight: "600" }}>
-                              +{kwArray.length - 3} more
+                              +{kwArray.length - 2} more
                             </span>
                           )}
                         </div>
                       </div>
                     </td>
 
-                    {/* Column 5: SEO Description (made larger) */}
-                    <td style={{ padding: "10px 12px", verticalAlign: "top" }}>
-                      <div style={{ position: "relative" }}>
+                    {/* SEO Description Input */}
+                    <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
+                      <div>
                         <textarea
-                          rows={3}
+                          rows={2}
                           value={descVal}
                           onChange={(e) =>
                             setDrafts((prev) => ({
@@ -603,22 +823,24 @@ export function BulkResourceTable({
                           placeholder={`Enter SEO description (max ${DESC_MAX})...`}
                           style={{
                             width: "100%",
-                            padding: "8px 10px",
+                            padding: "7px 10px",
                             fontSize: "12px",
                             lineHeight: "1.4",
                             borderRadius: "6px",
-                            border: `1px solid ${descLen > DESC_MAX ? "#ef4444" : "#cbd5e1"}`,
+                            border: `1px solid ${descLen > DESC_MAX ? "#ef4444" : "#e2e8f0"}`,
                             boxSizing: "border-box",
                             resize: "vertical",
                             background: "#ffffff",
+                            color: "#0f172a",
+                            outline: "none",
                           }}
                         />
                         <div
                           style={{
-                            fontSize: "10px",
+                            fontSize: "11px",
                             fontWeight: "700",
-                            marginTop: "4px",
-                            color: descLen === 0 ? "#94a3b8" : descLen <= DESC_MAX ? "#16a34a" : "#ef4444",
+                            marginTop: "3px",
+                            color: descLen === 0 ? "#94a3b8" : descLen <= DESC_MAX ? "#10b981" : "#ef4444",
                           }}
                         >
                           {descLen} / {DESC_MAX} characters
@@ -626,17 +848,17 @@ export function BulkResourceTable({
                       </div>
                     </td>
 
-                    {/* Column 6: Status */}
-                    <td style={{ padding: "10px 8px", verticalAlign: "top", textAlign: "center" }}>
+                    {/* Status Badge */}
+                    <td style={{ padding: "12px 10px", verticalAlign: "top", textAlign: "center" }}>
                       {dirty ? (
                         <span
                           style={{
                             display: "inline-block",
-                            background: "#fef3c7",
-                            color: "#92400e",
+                            background: "#fffbeb",
+                            color: "#d97706",
                             border: "1px solid #fde68a",
-                            padding: "3px 8px",
-                            borderRadius: "4px",
+                            padding: "3px 9px",
+                            borderRadius: "6px",
                             fontSize: "11px",
                             fontWeight: "700",
                             whiteSpace: "nowrap",
@@ -648,11 +870,11 @@ export function BulkResourceTable({
                         <span
                           style={{
                             display: "inline-block",
-                            background: "#dcfce7",
-                            color: "#166534",
-                            border: "1px solid #bbf7d0",
-                            padding: "3px 8px",
-                            borderRadius: "4px",
+                            background: "#ecfdf5",
+                            color: "#059669",
+                            border: "1px solid #a7f3d0",
+                            padding: "3px 9px",
+                            borderRadius: "6px",
                             fontSize: "11px",
                             fontWeight: "700",
                             whiteSpace: "nowrap",
@@ -664,11 +886,11 @@ export function BulkResourceTable({
                         <span
                           style={{
                             display: "inline-block",
-                            background: "#fee2e2",
-                            color: "#991b1b",
+                            background: "#fef2f2",
+                            color: "#dc2626",
                             border: "1px solid #fecaca",
-                            padding: "3px 8px",
-                            borderRadius: "4px",
+                            padding: "3px 9px",
+                            borderRadius: "6px",
                             fontSize: "11px",
                             fontWeight: "700",
                             whiteSpace: "nowrap",
@@ -678,6 +900,32 @@ export function BulkResourceTable({
                         </span>
                       )}
                     </td>
+
+                    {/* Actions Menu */}
+                    <td style={{ padding: "12px 8px", verticalAlign: "top", textAlign: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateSingle(item)}
+                        title="Quick AI generate SEO for this item"
+                        style={{
+                          width: "30px",
+                          height: "30px",
+                          borderRadius: "6px",
+                          border: "1px solid #e2e8f0",
+                          background: "#ffffff",
+                          color: "#64748b",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "700",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        •••
+                      </button>
+                    </td>
                   </tr>
                 );
               })
@@ -686,50 +934,92 @@ export function BulkResourceTable({
         </table>
       </div>
 
-      {/* Optional Pagination Controls */}
-      {pagination && pagination.totalPages > 1 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", width: "100%", boxSizing: "border-box" }}>
-          <div style={{ fontSize: "13px", color: "#64748b" }}>
-            Showing page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.totalCount} total)
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              type="button"
-              onClick={() => onPageChange && onPageChange(pagination.currentPage - 1, pagination.startCursor, "prev")}
-              disabled={!pagination.hasPreviousPage}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-                background: pagination.hasPreviousPage ? "#ffffff" : "#f1f5f9",
-                color: pagination.hasPreviousPage ? "#0f172a" : "#94a3b8",
-                fontSize: "13px",
-                fontWeight: "600",
-                cursor: pagination.hasPreviousPage ? "pointer" : "not-allowed",
-              }}
-            >
-              ← Previous
-            </button>
-            <button
-              type="button"
-              onClick={() => onPageChange && onPageChange(pagination.currentPage + 1, pagination.endCursor, "next")}
-              disabled={!pagination.hasNextPage}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-                background: pagination.hasNextPage ? "#ffffff" : "#f1f5f9",
-                color: pagination.hasNextPage ? "#0f172a" : "#94a3b8",
-                fontSize: "13px",
-                fontWeight: "600",
-                cursor: pagination.hasNextPage ? "pointer" : "not-allowed",
-              }}
-            >
-              Next →
-            </button>
-          </div>
+      {/* 5. COMPACT BOTTOM PAGINATION (Matching Reference: "Showing 1-4 of 209 products" & "< 1 2 3 4 5 >") */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "10px 4px",
+          flexWrap: "wrap",
+          gap: "10px",
+        }}
+      >
+        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+          Showing {filtered.length > 0 ? (safeCurrentPage - 1) * pageSize + 1 : 0}–{Math.min(safeCurrentPage * pageSize, filtered.length)} of {filtered.length} {categoryLabel.toLowerCase()}
         </div>
-      )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={safeCurrentPage === 1}
+            style={{
+              width: "30px",
+              height: "30px",
+              borderRadius: "6px",
+              border: "1px solid #e2e8f0",
+              background: safeCurrentPage === 1 ? "#f8fafc" : "#ffffff",
+              color: safeCurrentPage === 1 ? "#cbd5e1" : "#475569",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: safeCurrentPage === 1 ? "not-allowed" : "pointer",
+              fontSize: "13px",
+              fontWeight: "700",
+            }}
+          >
+            ‹
+          </button>
+
+          {getPageNumbers().map((pageNum) => (
+            <button
+              key={pageNum}
+              type="button"
+              onClick={() => setCurrentPage(pageNum)}
+              style={{
+                width: "30px",
+                height: "30px",
+                borderRadius: "6px",
+                border: pageNum === safeCurrentPage ? "1px solid #0f172a" : "1px solid #e2e8f0",
+                background: pageNum === safeCurrentPage ? "#0f172a" : "#ffffff",
+                color: pageNum === safeCurrentPage ? "#ffffff" : "#64748b",
+                fontWeight: pageNum === safeCurrentPage ? "700" : "600",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              {pageNum}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safeCurrentPage === totalPages}
+            style={{
+              width: "30px",
+              height: "30px",
+              borderRadius: "6px",
+              border: "1px solid #e2e8f0",
+              background: safeCurrentPage === totalPages ? "#f8fafc" : "#ffffff",
+              color: safeCurrentPage === totalPages ? "#cbd5e1" : "#475569",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: safeCurrentPage === totalPages ? "not-allowed" : "pointer",
+              fontSize: "13px",
+              fontWeight: "700",
+            }}
+          >
+            ›
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

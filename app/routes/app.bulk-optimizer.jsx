@@ -724,37 +724,105 @@ export default function BulkOptimizer() {
         </div>
       )}
 
-      {/* Navigation Breadcrumb & Back Link */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+      {/* Top Header Bar (Matching Reference Design) */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "10px 16px",
+          background: "#ffffff",
+          borderRadius: "12px",
+          border: "1px solid #e2e8f0",
+          marginBottom: "14px",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <Link to="/app" style={{ color: "#2563eb", textDecoration: "none", fontSize: "13px", fontWeight: "600" }}>
+          <Link
+            to="/app"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              color: "#0f172a",
+              textDecoration: "none",
+              fontSize: "15px",
+              fontWeight: "800",
+            }}
+          >
+            <span style={{ color: "#64748b" }}>←</span>
+            <span>Bulk SEO Optimizer</span>
+          </Link>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{ position: "relative", cursor: "pointer", display: "flex", alignItems: "center" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+            <span style={{ position: "absolute", top: "-2px", right: "-2px", width: "7px", height: "7px", borderRadius: "50%", background: "#ef4444", border: "1.5px solid #ffffff" }} />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", padding: "4px 10px 4px 6px", borderRadius: "20px", border: "1px solid #e2e8f0" }}>
+            <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#2563eb", color: "#ffffff", fontSize: "11px", fontWeight: "800", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {shop.name ? shop.name.charAt(0).toUpperCase() : "D"}
+            </div>
+            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a" }}>
+              {shop.name || "Develops Team"}
+            </span>
+            <span style={{ fontSize: "10px", color: "#94a3b8" }}>⌄</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Breadcrumb & Back Link */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Link to="/app" style={{ color: "#2563eb", textDecoration: "none", fontSize: "13px", fontWeight: "700" }}>
             ← Back to Dashboard
           </Link>
           <span style={{ color: "#cbd5e1" }}>|</span>
           <span style={{ fontSize: "13px", color: "#64748b" }}>
-            Store: <strong>{shop.name}</strong>
+            Store: <strong style={{ color: "#0f172a" }}>{shop.name}</strong>
           </span>
         </div>
 
         <div style={{ display: "flex", gap: "8px" }}>
           <Link
             to="/app/image-alt-optimizer"
-            style={{ background: "#f1f5f9", color: "#334155", padding: "6px 12px", borderRadius: "6px", textDecoration: "none", fontSize: "12px", fontWeight: "600" }}
+            style={{
+              background: "#ffffff",
+              color: "#334155",
+              padding: "6px 12px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              textDecoration: "none",
+              fontSize: "12px",
+              fontWeight: "700",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+            }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><IconImage size={15} /> Image ALT Optimizer <IconArrowRight size={13} /></span>
+            <IconImage size={14} color="#06b6d4" />
+            <span>Image ALT Optimizer</span>
+            <span style={{ color: "#94a3b8" }}>→</span>
           </Link>
         </div>
       </div>
 
-      {/* RESOURCE SWITCHER TABS */}
+      {/* RESOURCE SWITCHER TABS (Compact, modern pill segmented control) */}
       <div
         style={{
           display: "flex",
           gap: "8px",
           background: "#f1f5f9",
-          padding: "6px",
+          padding: "5px",
           borderRadius: "10px",
-          marginBottom: "20px",
+          marginBottom: "16px",
           border: "1px solid #e2e8f0",
           flexWrap: "wrap",
         }}
@@ -763,9 +831,9 @@ export default function BulkOptimizer() {
           type="button"
           onClick={() => handleSelectResource("products")}
           style={{
-            flex: "1 1 180px",
-            padding: "10px 16px",
-            borderRadius: "8px",
+            flex: "1 1 160px",
+            padding: "9px 14px",
+            borderRadius: "7px",
             border: "none",
             background: activeResource === "products" ? "#ffffff" : "transparent",
             color: activeResource === "products" ? "#0f172a" : "#64748b",
@@ -780,16 +848,17 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <IconBox size={16} /> Products ({pagination.totalCount || products.length})
+          <IconBox size={16} color={activeResource === "products" ? "#2563eb" : "#64748b"} />
+          <span>Products ({pagination.totalCount || products.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectResource("collections")}
           style={{
-            flex: "1 1 180px",
-            padding: "10px 16px",
-            borderRadius: "8px",
+            flex: "1 1 160px",
+            padding: "9px 14px",
+            borderRadius: "7px",
             border: "none",
             background: activeResource === "collections" ? "#ffffff" : "transparent",
             color: activeResource === "collections" ? "#0f172a" : "#64748b",
@@ -804,16 +873,17 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <IconFolder size={16} /> Collections ({collections.length})
+          <IconFolder size={16} color={activeResource === "collections" ? "#f59e0b" : "#64748b"} />
+          <span>Collections ({collections.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectResource("pages")}
           style={{
-            flex: "1 1 180px",
-            padding: "10px 16px",
-            borderRadius: "8px",
+            flex: "1 1 160px",
+            padding: "9px 14px",
+            borderRadius: "7px",
             border: "none",
             background: activeResource === "pages" ? "#ffffff" : "transparent",
             color: activeResource === "pages" ? "#0f172a" : "#64748b",
@@ -828,16 +898,17 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <IconFileText size={16} /> Pages ({pages.length})
+          <IconFileText size={16} color={activeResource === "pages" ? "#8b5cf6" : "#64748b"} />
+          <span>Pages ({pages.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectResource("articles")}
           style={{
-            flex: "1 1 180px",
-            padding: "10px 16px",
-            borderRadius: "8px",
+            flex: "1 1 160px",
+            padding: "9px 14px",
+            borderRadius: "7px",
             border: "none",
             background: activeResource === "articles" ? "#ffffff" : "transparent",
             color: activeResource === "articles" ? "#0f172a" : "#64748b",
@@ -852,7 +923,8 @@ export default function BulkOptimizer() {
             transition: "all 0.15s ease",
           }}
         >
-          <IconArticle size={16} /> Blog Posts ({articles.length})
+          <IconArticle size={16} color={activeResource === "articles" ? "#10b981" : "#64748b"} />
+          <span>Blog Posts ({articles.length})</span>
         </button>
       </div>
 
