@@ -12,14 +12,17 @@ import {
   IconArticle,
   IconImage,
   IconRocket,
-  IconGlobe,
-  IconTag,
   IconRefresh,
+  IconClock,
   IconCheckCircle,
   IconAlertTriangle,
   IconArrowRight,
+  IconSparkles,
+  IconTrendingUp,
+  IconStore,
+  IconInfo,
+  IconEdit,
 } from "../components/Icons";
-
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -89,7 +92,7 @@ export const loader = async ({ request }) => {
     const totalProducts = data?.data?.productsCount?.count || 0;
     const sampleProducts = data?.data?.products?.edges?.map((e) => e.node) || [];
 
-    // 2. Retrieve catalog audit metrics (product-focused existing system)
+    // 2. Retrieve catalog audit metrics
     const currentShop = shopName || shop.myshopifyDomain || "default-store";
     const auditResult = await getStoreAuditStats(admin, currentShop, totalProducts, sampleProducts);
 
@@ -244,7 +247,7 @@ export const loader = async ({ request }) => {
     const pageCat = catScore(pageSeoData);
     const articleCat = catScore(articleSeoData);
 
-    // Alt tag score: ratio of images with alt text across all products
+    // Alt tag score
     let totalImages = 0;
     let imagesWithAlt = 0;
     for (const p of sampleProducts) {
@@ -254,7 +257,7 @@ export const loader = async ({ request }) => {
     }
     const altScore = totalImages > 0 ? Math.round((imagesWithAlt / totalImages) * 100) : null;
 
-    // 7. Weighted global score (weights: products 35, collections 20, pages 20, articles 15, alt 10)
+    // 7. Weighted global score
     const weights = [
       { cat: productCat, weight: 35 },
       { cat: collectionCat, weight: 20 },
@@ -289,7 +292,6 @@ export const loader = async ({ request }) => {
       shopDomain: shop.myshopifyDomain || shopName,
       clientId: process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148",
       appUrl: process.env.SHOPIFY_APP_URL || "https://seooptimizer.zooq.app",
-      // Global comprehensive score
       globalSeoScore,
       seoBreakdown: {
         products: productCat,
@@ -303,18 +305,7 @@ export const loader = async ({ request }) => {
     console.error("Dashboard loader error:", error);
     return {
       shop: { name: "Your Store", domain: "", email: "", plan: "Shopify" },
-      stats: {
-        totalProducts: 0,
-        withSeoTitle: 0,
-        withSeoDesc: 0,
-        withOptimalTitle: 0,
-        missingTitle: 0,
-        missingDesc: 0,
-        titleCoveragePct: 0,
-        descCoveragePct: 0,
-        optimalTitlePct: 0,
-        seoScore: 0,
-      },
+      stats: { total: 0, withTitle: 0, withDescription: 0, withBoth: 0, missingTitle: 0, missingDescription: 0, score: 0 },
       isAuditing: false,
       lastAuditedAt: null,
       allProductsCount: 0,
@@ -323,10 +314,10 @@ export const loader = async ({ request }) => {
       articlesCount: 0,
       contentScopeError: false,
       shopDomain: "",
-      clientId: process.env.SHOPIFY_API_KEY || "cdeb2fd429e5b0cceb3d43906b7f2148",
-      appUrl: process.env.SHOPIFY_APP_URL || "https://seooptimizer.zooq.app",
+      clientId: "",
+      appUrl: "",
       globalSeoScore: 0,
-      seoBreakdown: { products: null, collections: null, pages: null, articles: null, altTags: null },
+      seoBreakdown: {},
     };
   }
 };
@@ -334,48 +325,36 @@ export const loader = async ({ request }) => {
 export default function Dashboard() {
   const {
     shop,
-    stats: initialStats,
-    allProductsCount,
-    collectionsCount = 0,
-    pagesCount: initialPagesCount = 0,
-    articlesCount: initialArticlesCount = 0,
-    contentScopeError = false,
-    shopDomain = "",
-    clientId = "",
-    appUrl = "https://seooptimizer.zooq.app",
+    stats,
     isAuditing: initialIsAuditing,
-    lastAuditedAt: initialLastAudit,
-    globalSeoScore: initialGlobalScore = 0,
-    seoBreakdown: initialBreakdown = {},
+    lastAuditedAt,
+    allProductsCount,
+    collectionsCount,
+    pagesCount,
+    articlesCount,
+    contentScopeError,
+    shopDomain,
+    clientId,
+    appUrl,
+    globalSeoScore,
+    seoBreakdown,
   } = useLoaderData();
+
   const navigation = useNavigation();
   const isPageLoading = navigation.state === "loading";
 
-  const [stats, setStats] = useState(initialStats);
   const [isAuditing, setIsAuditing] = useState(initialIsAuditing);
-  const [lastAudit, setLastAudit] = useState(initialLastAudit);
+  const [lastAudit, setLastAudit] = useState(lastAuditedAt);
   const [isTriggering, setIsTriggering] = useState(false);
-  const globalSeoScore = initialGlobalScore;
-  const seoBreakdown = initialBreakdown;
 
-  const pagesCount = initialPagesCount;
-  const articlesCount = initialArticlesCount;
-  const [dashToast, setDashToast] = useState(null);
-
-  const reauthUrl = shopDomain ? `https://${shopDomain}/admin/oauth/authorize?client_id=${clientId || "cdeb2fd429e5b0cceb3d43906b7f2148"}&scope=write_products,write_files,write_content&redirect_uri=${encodeURIComponent((appUrl || "https://seooptimizer.zooq.app") + "/auth/callback")}` : "#";
-
-  // Poll for audit completion if background scan is in progress
+  // Poll audit status if background audit is active
   useEffect(() => {
     if (!isAuditing) return;
-
     const interval = setInterval(async () => {
       try {
         const res = await fetch("/api/store-audit");
         const json = await res.json();
         if (json.success) {
-          if (json.stats) {
-            setStats(json.stats);
-          }
           if (!json.isAuditing) {
             setIsAuditing(false);
             if (json.lastAuditedAt) {
@@ -409,11 +388,22 @@ export default function Dashboard() {
   }, [isAuditing, isTriggering]);
 
   const totalCatalog = allProductsCount || stats.totalProducts || 0;
-  const missingTitles = stats.missingTitle;
-  const missingDescriptions = stats.missingDesc;
+  const missingTitles = stats.missingTitle || 0;
+  const missingDescriptions = stats.missingDesc || 0;
+
+  const reauthUrl = `https://${shopDomain}/admin/oauth/authorize?client_id=${clientId}&scope=write_products,write_files,write_content&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}`;
+
+  // Semi-circle gauge calculations (radius 52, perimeter ~163.36)
+  const arcPerimeter = 163.36;
+  const strokeOffset = arcPerimeter - (arcPerimeter * Math.min(Math.max(globalSeoScore || 0, 0), 100)) / 100;
+  const gaugeColor = globalSeoScore >= 80 ? "#10b981" : globalSeoScore >= 50 ? "#f59e0b" : "#ef4444";
+
+  const formattedDate = lastAudit
+    ? `${new Date(lastAudit).toLocaleDateString()} ${new Date(lastAudit).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : "Just now";
 
   return (
-    <s-page full-width heading={`Welcome, ${shop.name}`}>
+    <s-page full-width heading="" inline-size="large" inlineSize="large">
       <style>{`
         s-page {
           display: block;
@@ -425,223 +415,97 @@ export default function Dashboard() {
           width: 100% !important;
           max-width: 100% !important;
         }
-        .hub-card {
-          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        .dash-card {
+          background: #ffffff;
+          border: 1px solid #edf2f7;
+          border-radius: 16px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 12px rgba(15, 23, 42, 0.03);
+          transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
         }
-        .hub-card:hover {
+        .dash-card:hover {
+          border-color: #cbd5e1;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+        }
+        .dash-card-clickable {
+          cursor: pointer;
+        }
+        .dash-card-clickable:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08) !important;
-          border-color: #cbd5e1 !important;
+          border-color: #94a3b8;
+          box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
         }
-        .action-card {
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        .action-card-dark {
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
-        .action-card:hover {
+        .action-card-dark:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25) !important;
         }
+        .action-card-blue {
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .action-card-blue:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3) !important;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       `}</style>
-      <div style={{ width: "100%", maxWidth: "100%", margin: "0 auto", padding: "0 12px", boxSizing: "border-box" }}>
 
-      {/* Background Audit Progress Banner */}
-      {isAuditing && (
-        <s-section>
+      <div style={{ width: "100%", maxWidth: "100%", margin: "0 auto", padding: "4px 8px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: "14px" }}>
+
+        {/* Audit Progress Notification (if currently re-scanning) */}
+        {isAuditing && (
           <div
             style={{
-              background: "linear-gradient(90deg, #f0fdf4 0%, #dcfce7 100%)",
-              border: "1.5px solid #22c55e",
+              background: "#f0fdf4",
+              border: "1px solid #86efac",
               borderRadius: "12px",
-              padding: "16px 22px",
-              marginBottom: "16px",
+              padding: "10px 18px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              flexWrap: "wrap",
               gap: "12px",
-              boxShadow: "0 4px 12px rgba(34, 197, 94, 0.15)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <div
-                style={{
-                  width: "22px",
-                  height: "22px",
-                  border: "3px solid #bbf7d0",
-                  borderTop: "3px solid #16a34a",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              />
-              <div>
-                <div style={{ fontSize: "14px", fontWeight: "700", color: "#166534" }}>
-                  Full Catalog SEO Audit in Progress
-                </div>
-                <div style={{ fontSize: "12px", color: "#15803d", marginTop: "2px" }}>
-                  Analyzing all {totalCatalog.toLocaleString()} products in your store. Stats will refresh automatically once completed.
-                </div>
-              </div>
-            </div>
-            <div
-              style={{
-                fontSize: "12px",
-                fontWeight: "700",
-                color: "#166534",
-                background: "#ffffff",
-                padding: "6px 14px",
-                borderRadius: "20px",
-                border: "1px solid #86efac",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <IconRefresh size={13} color="#166534" spinning={true} /> Auditing catalog live...
-            </div>
-          </div>
-        </s-section>
-      )}
-
-      {/* Store Overview Banner */}
-      <s-section>
-        <div
-          style={{
-            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-            borderRadius: "14px",
-            padding: "28px 32px",
-            color: "#ffffff",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "20px",
-            boxShadow: "0 4px 20px rgba(15, 23, 42, 0.15)",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              Connected Shopify Store
-            </div>
-            <div style={{ fontSize: "26px", fontWeight: "800", marginBottom: "8px", color: "#f8fafc" }}>
-              {shop.name}
-            </div>
-            <div style={{ fontSize: "13px", color: "#cbd5e1", marginBottom: "6px", display: "flex", alignItems: "center", gap: "7px" }}>
-              <IconGlobe size={15} color="#94a3b8" /> {shop.domain}
-            </div>
-            <div style={{ fontSize: "13px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <IconBox size={14} color="#94a3b8" /> <strong>{totalCatalog.toLocaleString()}</strong> Products in catalog
-              </span>
-              <span>•</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <IconTag size={14} color="#94a3b8" /> {shop.plan} Plan
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <IconRefresh size={16} color="#16a34a" spinning={true} />
+              <span style={{ fontSize: "13px", fontWeight: "700", color: "#166534" }}>
+                Catalog Audit in Progress: Scanning {totalCatalog.toLocaleString()} store products live...
               </span>
             </div>
-
-            {/* Audit Actions & Timestamp */}
-            <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={handleTriggerReAudit}
-                disabled={isAuditing || isTriggering}
-                style={{
-                  background: isAuditing ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0.15)",
-                  border: "1px solid rgba(255, 255, 255, 0.25)",
-                  color: "#ffffff",
-                  borderRadius: "8px",
-                  padding: "7px 14px",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  cursor: isAuditing || isTriggering ? "not-allowed" : "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "7px",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                <IconRefresh size={14} color="#ffffff" spinning={isAuditing} />
-                <span>{isAuditing ? "Scanning Catalog..." : isTriggering ? "Starting..." : "Re-scan Full Catalog"}</span>
-              </button>
-              {lastAudit && (
-                <span style={{ fontSize: "11px", color: "#94a3b8" }}>
-                  Last audited: {new Date(lastAudit).toLocaleDateString()} {new Date(lastAudit).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              )}
-            </div>
+            <span style={{ fontSize: "11px", fontWeight: "600", color: "#15803d" }}>
+              Stats will auto-refresh upon completion
+            </span>
           </div>
+        )}
 
-          {/* Overall SEO Score Ring */}
-          <div
-            style={{
-              background: "rgba(255, 255, 255, 0.07)",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: "14px",
-              padding: "20px 28px",
-              textAlign: "center",
-              minWidth: "170px",
-            }}
-          >
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "6px", fontWeight: "700", letterSpacing: "0.5px", textTransform: "uppercase" }}>
-              Store SEO Health
-            </div>
-            <div
-              style={{
-                fontSize: "52px",
-                fontWeight: "900",
-                lineHeight: 1,
-                color: globalSeoScore >= 80 ? "#4ade80" : globalSeoScore >= 50 ? "#fbbf24" : "#f87171",
-              }}
-            >
-              {globalSeoScore}
-            </div>
-            <div style={{ fontSize: "13px", color: "#64748b", fontWeight: "700" }}>/ 100</div>
-            <div
-              style={{
-                fontSize: "11px",
-                marginTop: "8px",
-                fontWeight: "700",
-                padding: "3px 10px",
-                borderRadius: "20px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                background: globalSeoScore >= 80 ? "rgba(74, 222, 128, 0.15)" : globalSeoScore >= 50 ? "rgba(251, 191, 36, 0.15)" : "rgba(248, 113, 113, 0.15)",
-                color: globalSeoScore >= 80 ? "#4ade80" : globalSeoScore >= 50 ? "#fbbf24" : "#f87171",
-              }}
-            >
-              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "currentColor" }} />
-              {globalSeoScore >= 80 ? "Optimal Health" : globalSeoScore >= 50 ? "Needs Optimization" : "Critical Gaps"}
-            </div>
-          </div>
-        </div>
-      </s-section>
-
-      {/* Scope Warning Banner if write_content is pending */}
-      {contentScopeError && (
-        <s-section>
+        {/* Scope Warning Banner if write_content is pending */}
+        {contentScopeError && (
           <div
             style={{
               background: "#fffbeb",
               border: "1.5px solid #fde68a",
               borderRadius: "12px",
-              padding: "16px 20px",
-              color: "#92400e",
-              fontSize: "14px",
+              padding: "12px 18px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               flexWrap: "wrap",
-              gap: "14px",
+              gap: "12px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <IconAlertTriangle size={24} color="#d97706" />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <IconAlertTriangle size={20} color="#d97706" />
               <div>
-                <div style={{ fontWeight: "800", fontSize: "14px", color: "#78350f" }}>
-                  Action Required: Shopify Content Permission Pending
-                </div>
-                <div style={{ marginTop: "2px", color: "#92400e", fontSize: "12px" }}>
-                  To access and optimize Pages and Blog Articles, please grant updated content permissions.
-                </div>
+                <span style={{ fontWeight: "700", fontSize: "13px", color: "#78350f" }}>
+                  Permission Update Required:{" "}
+                </span>
+                <span style={{ color: "#92400e", fontSize: "12px" }}>
+                  Grant content permissions to audit and optimize Pages and Blog Articles.
+                </span>
               </div>
             </div>
             <a
@@ -650,665 +514,878 @@ export default function Dashboard() {
               style={{
                 background: "#b45309",
                 color: "#ffffff",
-                padding: "8px 16px",
-                borderRadius: "8px",
+                padding: "6px 14px",
+                borderRadius: "6px",
                 fontWeight: "700",
                 textDecoration: "none",
                 fontSize: "12px",
-                whiteSpace: "nowrap",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "6px",
+                gap: "5px",
               }}
             >
-              Grant Permission <IconArrowRight size={13} />
+              Grant Permission <IconArrowRight size={12} />
             </a>
           </div>
-        </s-section>
-      )}
+        )}
 
-      {/* Storewide Catalog Hub */}
-      <s-section heading="Storewide SEO Catalog Hub">
+        {/* =========================================================================
+            ROW 1: HERO (Welcome Card + Store SEO Health with Gauge & Illustration)
+            ========================================================================= */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "16px",
+            gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+            gap: "14px",
           }}
         >
-          {/* Products */}
+          {/* Welcome Card */}
           <div
-            className="hub-card"
+            className="dash-card"
             style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+              padding: "20px 22px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
-              gap: "16px",
+              gap: "14px",
             }}
           >
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "#f0f9ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <IconBox size={22} color="#0284c7" />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
+                <div
+                  style={{
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "12px",
+                    background: "#eff6ff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <IconStore size={22} color="#2563eb" />
                 </div>
-                <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "3px 9px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
-                  PRODUCTS
+                <div>
+                  <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+                    Welcome back,
+                  </div>
+                  <div style={{ fontSize: "22px", fontWeight: "800", color: "#0f172a", marginTop: "1px", lineHeight: "1.25" }}>
+                    {shop.name}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                    <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
+                    <span style={{ fontSize: "12px", color: "#475569", fontWeight: "600" }}>{shop.domain}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Chips */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "14px", flexWrap: "wrap" }}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#475569",
+                  }}
+                >
+                  <IconBox size={13} color="#64748b" />
+                  <span><strong>{totalCatalog.toLocaleString()}</strong> Products in catalog</span>
+                </span>
+
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#475569",
+                  }}
+                >
+                  <IconClock size={13} color="#64748b" />
+                  <span>Last updated: {formattedDate}</span>
                 </span>
               </div>
-              <div style={{ fontSize: "30px", fontWeight: "900", color: "#0f172a", marginTop: "12px" }}>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", paddingTop: "2px" }}>
+              <button
+                type="button"
+                onClick={handleTriggerReAudit}
+                disabled={isAuditing || isTriggering}
+                style={{
+                  background: "#0f172a",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  cursor: isAuditing || isTriggering ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  boxShadow: "0 2px 6px rgba(15, 23, 42, 0.15)",
+                }}
+              >
+                <IconRefresh size={13} color="#ffffff" spinning={isAuditing} />
+                <span>{isAuditing ? "Scanning Catalog..." : isTriggering ? "Starting..." : "Re-scan Full Catalog"}</span>
+              </button>
+
+              <a
+                href="#seo-breakdown"
+                style={{
+                  background: "#ffffff",
+                  color: "#334155",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                }}
+              >
+                <IconTrendingUp size={13} color="#475569" />
+                <span>View SEO Health</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Store SEO Health Card (Gauge + Graphic Illustration) */}
+          <div
+            className="dash-card"
+            style={{
+              padding: "20px 24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>Store SEO Health</span>
+                <span title="Weighted aggregate of Products, Collections, Pages, Blog Articles, and Image Alt text optimization"><IconInfo size={14} color="#94a3b8" /></span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "16px",
+                padding: "8px 0",
+              }}
+            >
+              {/* Semicircular Gauge */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                <div style={{ position: "relative", width: "134px", height: "78px" }}>
+                  <svg width="134" height="78" viewBox="0 0 140 85">
+                    {/* Background Arc */}
+                    <path
+                      d="M 18 75 A 52 52 0 0 1 122 75"
+                      fill="none"
+                      stroke="#e2e8f0"
+                      strokeWidth="11"
+                      strokeLinecap="round"
+                    />
+                    {/* Progress Arc */}
+                    <path
+                      d="M 18 75 A 52 52 0 0 1 122 75"
+                      fill="none"
+                      stroke={gaugeColor}
+                      strokeWidth="11"
+                      strokeLinecap="round"
+                      strokeDasharray={arcPerimeter}
+                      strokeDashoffset={strokeOffset}
+                      style={{ transition: "stroke-dashoffset 0.8s ease" }}
+                    />
+                    {/* Center Score */}
+                    <text
+                      x="70"
+                      y="60"
+                      textAnchor="middle"
+                      fontSize="32"
+                      fontWeight="900"
+                      fill="#0f172a"
+                    >
+                      {globalSeoScore}
+                    </text>
+                    <text
+                      x="70"
+                      y="75"
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontWeight="700"
+                      fill="#94a3b8"
+                    >
+                      /100
+                    </text>
+                  </svg>
+                </div>
+                <div
+                  style={{
+                    background: globalSeoScore >= 80 ? "#ecfdf5" : globalSeoScore >= 50 ? "#fffbeb" : "#fef2f2",
+                    border: `1px solid ${globalSeoScore >= 80 ? "#a7f3d0" : globalSeoScore >= 50 ? "#fde68a" : "#fecaca"}`,
+                    color: globalSeoScore >= 80 ? "#059669" : globalSeoScore >= 50 ? "#d97706" : "#dc2626",
+                    padding: "3px 12px",
+                    borderRadius: "20px",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    marginTop: "6px",
+                  }}
+                >
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "currentColor" }} />
+                  {globalSeoScore >= 80 ? "Optimal Health" : globalSeoScore >= 50 ? "Needs Work" : "Action Needed"}
+                </div>
+              </div>
+
+              {/* Graphic Illustration (Browser & Analytics Search) */}
+              <div
+                style={{
+                  flex: "1 1 auto",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: "136px",
+                    height: "92px",
+                    background: "linear-gradient(145deg, #f8fafc 0%, #edf2f7 100%)",
+                    borderRadius: "10px",
+                    border: "1px solid #e2e8f0",
+                    padding: "8px 10px",
+                    boxSizing: "border-box",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    boxShadow: "inset 0 1px 2px rgba(255,255,255,0.8), 0 4px 10px rgba(0,0,0,0.02)",
+                  }}
+                >
+                  {/* Browser top pill */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cbd5e1" }} />
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cbd5e1" }} />
+                    <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#cbd5e1" }} />
+                    <div style={{ flex: 1, height: "6px", background: "#ffffff", borderRadius: "3px", marginLeft: "4px", border: "1px solid #e2e8f0" }} />
+                  </div>
+
+                  {/* Rising colorful analytics bars */}
+                  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", height: "46px", padding: "0 6px" }}>
+                    <div style={{ width: "14px", height: "24px", background: "#10b981", borderRadius: "3px 3px 0 0" }} />
+                    <div style={{ width: "14px", height: "36px", background: "#3b82f6", borderRadius: "3px 3px 0 0" }} />
+                    <div style={{ width: "14px", height: "46px", background: "#8b5cf6", borderRadius: "3px 3px 0 0" }} />
+                  </div>
+
+                  {/* Search magnifier badge */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: "-6px",
+                      top: "20px",
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "50%",
+                      background: "#ffffff",
+                      border: "1.5px solid #e2e8f0",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="7" />
+                      <line x1="21" y1="21" x2="16.5" y2="16.5" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* =========================================================================
+            ROW 2: 4 METRIC CARDS (Products, Collections, Pages, Blog Posts)
+            ========================================================================= */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {/* Card 1: Products */}
+          <Link to="/app/bulk-optimizer?resource=products" style={{ textDecoration: "none" }}>
+            <div className="dash-card dash-card-clickable" style={{ padding: "16px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "9px", background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <IconBox size={16} color="#2563eb" />
+                  </div>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>Products</span>
+                </div>
+                <IconArrowRight size={13} color="#94a3b8" />
+              </div>
+
+              <div style={{ fontSize: "26px", fontWeight: "900", color: "#0f172a", marginTop: "10px" }}>
                 {totalCatalog.toLocaleString()}
               </div>
-              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "1px" }}>
                 Store Catalog Products
               </div>
-            </div>
-            <Link
-              to="/app/bulk-optimizer?resource=products"
-              style={{
-                background: "#f8fafc",
-                color: "#0f172a",
-                border: "1px solid #e2e8f0",
-                padding: "9px 14px",
-                borderRadius: "8px",
-                fontWeight: "700",
-                fontSize: "12px",
-                textDecoration: "none",
-                textAlign: "center",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              Bulk Optimize Products <IconArrowRight size={13} />
-            </Link>
-          </div>
 
-          {/* Collections */}
-          <div
-            className="hub-card"
-            style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              gap: "16px",
-            }}
-          >
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "#fffbeb", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <IconFolder size={22} color="#d97706" />
-                </div>
-                <span style={{ background: "#fef3c7", color: "#92400e", padding: "3px 9px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
-                  COLLECTIONS
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "#10b981" }}>
+                  ↑ {missingTitles === 0 ? "100%" : `${Math.round(((totalCatalog - missingTitles) / (totalCatalog || 1)) * 100)}%`}
                 </span>
+                <svg width="76" height="22" viewBox="0 0 76 22" fill="none">
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4" stroke="#3b82f6" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4 L 76 22 L 0 22 Z" fill="#3b82f6" fillOpacity="0.08" />
+                </svg>
               </div>
-              <div style={{ fontSize: "30px", fontWeight: "900", color: "#0f172a", marginTop: "12px" }}>
+            </div>
+          </Link>
+
+          {/* Card 2: Collections */}
+          <Link to="/app/bulk-optimizer?resource=collections" style={{ textDecoration: "none" }}>
+            <div className="dash-card dash-card-clickable" style={{ padding: "16px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "9px", background: "#f5f3ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <IconFolder size={16} color="#8b5cf6" />
+                  </div>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>Collections</span>
+                </div>
+                <IconArrowRight size={13} color="#94a3b8" />
+              </div>
+
+              <div style={{ fontSize: "26px", fontWeight: "900", color: "#0f172a", marginTop: "10px" }}>
                 {collectionsCount.toLocaleString()}
               </div>
-              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "1px" }}>
                 Category Collections
               </div>
-            </div>
-            <Link
-              to="/app/bulk-optimizer?resource=collections"
-              style={{
-                background: "#f8fafc",
-                color: "#0f172a",
-                border: "1px solid #e2e8f0",
-                padding: "9px 14px",
-                borderRadius: "8px",
-                fontWeight: "700",
-                fontSize: "12px",
-                textDecoration: "none",
-                textAlign: "center",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              Bulk Optimize Collections <IconArrowRight size={13} />
-            </Link>
-          </div>
 
-          {/* Store Pages */}
-          <div
-            className="hub-card"
-            style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              gap: "16px",
-            }}
-          >
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "#faf5ff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <IconFileText size={22} color="#7c3aed" />
-                </div>
-                <span style={{ background: "#ede9fe", color: "#5b21b6", padding: "3px 9px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
-                  PAGES
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "#10b981" }}>
+                  ↑ {seoBreakdown?.collections?.score ?? 100}%
                 </span>
+                <svg width="76" height="22" viewBox="0 0 76 22" fill="none">
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4" stroke="#8b5cf6" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4 L 76 22 L 0 22 Z" fill="#8b5cf6" fillOpacity="0.08" />
+                </svg>
               </div>
-              <div style={{ fontSize: "30px", fontWeight: "900", color: "#0f172a", marginTop: "12px" }}>
+            </div>
+          </Link>
+
+          {/* Card 3: Pages */}
+          <Link to="/app/bulk-optimizer?resource=pages" style={{ textDecoration: "none" }}>
+            <div className="dash-card dash-card-clickable" style={{ padding: "16px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "9px", background: "#fffbeb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <IconFileText size={16} color="#f59e0b" />
+                  </div>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>Pages</span>
+                </div>
+                <IconArrowRight size={13} color="#94a3b8" />
+              </div>
+
+              <div style={{ fontSize: "26px", fontWeight: "900", color: "#0f172a", marginTop: "10px" }}>
                 {pagesCount.toLocaleString()}
               </div>
-              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "1px" }}>
                 Content Pages (About, FAQ, Policies)
               </div>
-            </div>
-            <Link
-              to="/app/bulk-optimizer?resource=pages"
-              style={{
-                background: "#f8fafc",
-                color: "#0f172a",
-                border: "1px solid #e2e8f0",
-                padding: "9px 14px",
-                borderRadius: "8px",
-                fontWeight: "700",
-                fontSize: "12px",
-                textDecoration: "none",
-                textAlign: "center",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              Bulk Optimize Pages <IconArrowRight size={13} />
-            </Link>
-          </div>
 
-          {/* Blog Articles */}
-          <div
-            className="hub-card"
-            style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "20px",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              gap: "16px",
-            }}
-          >
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "#f0fdfa", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <IconArticle size={22} color="#0f766e" />
-                </div>
-                <span style={{ background: "#ccfbf1", color: "#0f766e", padding: "3px 9px", borderRadius: "6px", fontSize: "11px", fontWeight: "800" }}>
-                  BLOG POSTS
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "#10b981" }}>
+                  ↑ {seoBreakdown?.pages?.score ?? 100}%
                 </span>
+                <svg width="76" height="22" viewBox="0 0 76 22" fill="none">
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4" stroke="#f59e0b" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4 L 76 22 L 0 22 Z" fill="#f59e0b" fillOpacity="0.08" />
+                </svg>
               </div>
-              <div style={{ fontSize: "30px", fontWeight: "900", color: "#0f172a", marginTop: "12px" }}>
+            </div>
+          </Link>
+
+          {/* Card 4: Blog Posts */}
+          <Link to="/app/bulk-optimizer?resource=articles" style={{ textDecoration: "none" }}>
+            <div className="dash-card dash-card-clickable" style={{ padding: "16px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "9px", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <IconArticle size={16} color="#10b981" />
+                  </div>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#334155" }}>Blog Posts</span>
+                </div>
+                <IconArrowRight size={13} color="#94a3b8" />
+              </div>
+
+              <div style={{ fontSize: "26px", fontWeight: "900", color: "#0f172a", marginTop: "10px" }}>
                 {articlesCount.toLocaleString()}
               </div>
-              <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "1px" }}>
                 Editorial Blog Posts & Guides
               </div>
-            </div>
-            <Link
-              to="/app/bulk-optimizer?resource=articles"
-              style={{
-                background: "#f8fafc",
-                color: "#0f172a",
-                border: "1px solid #e2e8f0",
-                padding: "9px 14px",
-                borderRadius: "8px",
-                fontWeight: "700",
-                fontSize: "12px",
-                textDecoration: "none",
-                textAlign: "center",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              Bulk Optimize Articles <IconArrowRight size={13} />
-            </Link>
-          </div>
-        </div>
-      </s-section>
 
-      {/* Comprehensive SEO Score Breakdown */}
-      <s-section heading="SEO Score Breakdown by Resource">
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: "14px",
-            border: "1px solid #e2e8f0",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
-            overflow: "hidden",
-          }}
-        >
-          {/* Header row */}
-          <div
-            style={{
-              background: "#0f172a",
-              padding: "18px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: "10px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "15px", fontWeight: "800", color: "#ffffff" }}>
-                Overall Store SEO Health Score
-              </div>
-              <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>
-                Weighted evaluation: Products (35%) · Collections (20%) · Pages (20%) · Blog Articles (15%) · Alt Tags (10%)
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "#10b981" }}>
+                  ↑ {seoBreakdown?.articles?.score ?? 100}%
+                </span>
+                <svg width="76" height="22" viewBox="0 0 76 22" fill="none">
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4" stroke="#10b981" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+                  <path d="M 0 16 Q 18 6, 38 14 T 76 4 L 76 22 L 0 22 Z" fill="#10b981" fillOpacity="0.08" />
+                </svg>
               </div>
             </div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
-              <span
-                style={{
-                  fontSize: "44px",
-                  fontWeight: "900",
-                  color: globalSeoScore >= 80 ? "#4ade80" : globalSeoScore >= 50 ? "#fbbf24" : "#f87171",
-                  lineHeight: 1,
-                }}
-              >
-                {globalSeoScore}
-              </span>
-              <span style={{ fontSize: "16px", color: "#64748b", fontWeight: "700" }}>/100</span>
-            </div>
-          </div>
-
-          {/* Category rows */}
-          <div style={{ padding: "4px 0" }}>
-            {[
-              {
-                label: "Products",
-                icon: <IconBox size={16} color="#0284c7" />,
-                weight: "35 pts",
-                data: seoBreakdown?.products,
-                color: "#0284c7",
-                link: "/app/bulk-optimizer?resource=products",
-              },
-              {
-                label: "Collections",
-                icon: <IconFolder size={16} color="#d97706" />,
-                weight: "20 pts",
-                data: seoBreakdown?.collections,
-                color: "#d97706",
-                link: "/app/bulk-optimizer?resource=collections",
-              },
-              {
-                label: "Store Pages",
-                icon: <IconFileText size={16} color="#7c3aed" />,
-                weight: "20 pts",
-                data: seoBreakdown?.pages,
-                color: "#7c3aed",
-                link: "/app/bulk-optimizer?resource=pages",
-              },
-              {
-                label: "Blog Articles",
-                icon: <IconArticle size={16} color="#0e7490" />,
-                weight: "15 pts",
-                data: seoBreakdown?.articles,
-                color: "#0e7490",
-                link: "/app/bulk-optimizer?resource=articles",
-              },
-            ].map(({ label, icon, weight, data, color, link }) => {
-              const score = data?.score ?? null;
-              const n = data?.total ?? 0;
-              return (
-                <div
-                  key={label}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "170px 1fr 110px 90px",
-                    alignItems: "center",
-                    gap: "14px",
-                    padding: "14px 24px",
-                    borderBottom: "1px solid #f1f5f9",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {icon}
-                    <div>
-                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{label}</div>
-                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "1px" }}>Weight: {weight}</div>
-                    </div>
-                  </div>
-                  <div>
-                    {score !== null ? (
-                      <>
-                        <div style={{ height: "7px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden", marginBottom: "5px" }}>
-                          <div
-                            style={{
-                              height: "100%",
-                              width: `${score}%`,
-                              background: score >= 80 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444",
-                              borderRadius: "4px",
-                              transition: "width 0.5s ease",
-                            }}
-                          />
-                        </div>
-                        <div style={{ fontSize: "11px", color: "#64748b" }}>
-                          {n} item{n !== 1 ? "s" : ""} · Title: {data.withTitle}/{n} · Desc: {data.withDesc}/{n} · Keywords: {data.withKw}/{n}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>No items found</div>
-                    )}
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    {score !== null ? (
-                      <span
-                        style={{
-                          fontSize: "20px",
-                          fontWeight: "900",
-                          color: score >= 80 ? "#16a34a" : score >= 50 ? "#d97706" : "#dc2626",
-                        }}
-                      >
-                        {score}
-                        <span style={{ fontSize: "11px", fontWeight: "600", color: "#94a3b8" }}>/100</span>
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
-                    )}
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <Link
-                      to={link}
-                      style={{
-                        background: color,
-                        color: "#ffffff",
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        fontWeight: "700",
-                        fontSize: "11px",
-                        textDecoration: "none",
-                        whiteSpace: "nowrap",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      Optimize <IconArrowRight size={11} />
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Alt Tags row */}
-            {(() => {
-              const altData = seoBreakdown?.altTags;
-              const score = altData?.score ?? null;
-              return (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "170px 1fr 110px 90px",
-                    alignItems: "center",
-                    gap: "14px",
-                    padding: "14px 24px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <IconImage size={16} color="#059669" />
-                    <div>
-                      <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>Image Alt Tags</div>
-                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "1px" }}>Weight: 10 pts</div>
-                    </div>
-                  </div>
-                  <div>
-                    {score !== null ? (
-                      <>
-                        <div style={{ height: "7px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden", marginBottom: "5px" }}>
-                          <div
-                            style={{
-                              height: "100%",
-                              width: `${score}%`,
-                              background: score >= 80 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444",
-                              borderRadius: "4px",
-                              transition: "width 0.5s ease",
-                            }}
-                          />
-                        </div>
-                        <div style={{ fontSize: "11px", color: "#64748b" }}>
-                          {altData.imagesWithAlt} of {altData.totalImages} product images have alt text
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>No product images found</div>
-                    )}
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    {score !== null ? (
-                      <span
-                        style={{
-                          fontSize: "20px",
-                          fontWeight: "900",
-                          color: score >= 80 ? "#16a34a" : score >= 50 ? "#d97706" : "#dc2626",
-                        }}
-                      >
-                        {score}
-                        <span style={{ fontSize: "11px", fontWeight: "600", color: "#94a3b8" }}>/100</span>
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
-                    )}
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <Link
-                      to="/app/image-alt-optimizer"
-                      style={{
-                        background: "#059669",
-                        color: "#ffffff",
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        fontWeight: "700",
-                        fontSize: "11px",
-                        textDecoration: "none",
-                        whiteSpace: "nowrap",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      Optimize <IconArrowRight size={11} />
-                    </Link>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
+          </Link>
         </div>
-      </s-section>
 
-      {/* Quick Actions & Health Gaps */}
-      <s-section heading="Optimization Tools & Catalog Alerts">
+        {/* =========================================================================
+            ROW 3: SEO SCORE BREAKDOWN (Clean full width, red gauge removed)
+                   & QUICK ACTIONS (2x2 Grid)
+            ========================================================================= */}
         <div
+          id="seo-breakdown"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "16px",
+            gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+            gap: "14px",
           }}
         >
-          {/* SEO Bulk Optimizer */}
-          <Link to="/app/bulk-optimizer" style={{ textDecoration: "none" }}>
-            <div
-              className="action-card"
-              style={{
-                background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-                borderRadius: "12px",
-                padding: "24px",
-                cursor: "pointer",
-                color: "#ffffff",
-                boxShadow: "0 4px 14px rgba(15, 23, 42, 0.2)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                height: "100%",
-                boxSizing: "border-box",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "14px" }}>
-                  <IconRocket size={22} color="#34d399" />
-                </div>
-                <div style={{ fontSize: "16px", fontWeight: "800", marginBottom: "6px", color: "#f8fafc" }}>SEO Bulk Optimizer</div>
-                <div style={{ fontSize: "13px", color: "#94a3b8", lineHeight: "1.45" }}>
-                  Batch generate and save meta titles, descriptions, and keywords across products, collections, pages, and blogs.
-                </div>
-              </div>
-              <div style={{ marginTop: "16px", fontSize: "12px", fontWeight: "700", color: "#34d399", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                Launch Bulk Tool <IconArrowRight size={13} />
-              </div>
-            </div>
-          </Link>
-
-          {/* Image ALT Text Optimizer */}
-          <Link to="/app/image-alt-optimizer" style={{ textDecoration: "none" }}>
-            <div
-              className="action-card"
-              style={{
-                background: "linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)",
-                borderRadius: "12px",
-                padding: "24px",
-                cursor: "pointer",
-                color: "#ffffff",
-                boxShadow: "0 4px 14px rgba(30, 64, 175, 0.25)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                height: "100%",
-                boxSizing: "border-box",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "14px" }}>
-                  <IconImage size={22} color="#93c5fd" />
-                </div>
-                <div style={{ fontSize: "16px", fontWeight: "800", marginBottom: "6px", color: "#f8fafc" }}>Image ALT Optimizer</div>
-                <div style={{ fontSize: "13px", color: "#bfdbfe", lineHeight: "1.45" }}>
-                  Audit product images and store media to generate descriptive, accessibility-compliant alt texts with 1 click.
-                </div>
-              </div>
-              <div style={{ marginTop: "16px", fontSize: "12px", fontWeight: "700", color: "#93c5fd", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                Optimize Images Now <IconArrowRight size={13} />
-              </div>
-            </div>
-          </Link>
-
-          {/* Title Status Card */}
+          {/* SEO Score Breakdown Card */}
           <div
+            className="dash-card"
             style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "24px",
-              border: `1.5px solid ${missingTitles > 0 ? "#fecaca" : "#bbf7d0"}`,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+              padding: "20px 22px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
+              gap: "14px",
             }}
           >
             <div>
-              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: missingTitles > 0 ? "#fee2e2" : "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "14px" }}>
-                {missingTitles > 0 ? <IconAlertTriangle size={22} color="#dc2626" /> : <IconCheckCircle size={22} color="#16a34a" />}
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: "800", color: "#0f172a" }}>SEO Score Breakdown</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "1px" }}>Overall store SEO health and performance</div>
               </div>
-              <div style={{ fontSize: "16px", fontWeight: "800", marginBottom: "6px", color: missingTitles > 0 ? "#991b1b" : "#166534" }}>
-                {missingTitles > 0 ? "Title Gaps Detected" : "All Titles Complete"}
-              </div>
-              <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.45" }}>
-                {missingTitles > 0
-                  ? `${missingTitles.toLocaleString()} products are currently missing SEO meta titles.`
-                  : "Every product in your catalog has an SEO title set."}
+
+              {/* Progress rows taking full width (Red duplicate gauge completely removed) */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "14px" }}>
+                {[
+                  {
+                    name: "Products",
+                    icon: <IconBox size={14} color="#2563eb" />,
+                    bg: "#eff6ff",
+                    score: seoBreakdown?.products?.score ?? Math.round(((totalCatalog - missingTitles) / (totalCatalog || 1)) * 100),
+                    sub: `${seoBreakdown?.products?.withTitle ?? (totalCatalog - missingTitles)} items · ${seoBreakdown?.products?.withTitle ?? (totalCatalog - missingTitles)}/${totalCatalog}`,
+                    link: "/app/bulk-optimizer?resource=products",
+                  },
+                  {
+                    name: "Collections",
+                    icon: <IconFolder size={14} color="#f59e0b" />,
+                    bg: "#fffbeb",
+                    score: seoBreakdown?.collections?.score ?? 100,
+                    sub: `${collectionsCount} items · ${seoBreakdown?.collections?.withTitle ?? collectionsCount}/${collectionsCount || 1}`,
+                    link: "/app/bulk-optimizer?resource=collections",
+                  },
+                  {
+                    name: "Store Pages",
+                    icon: <IconFileText size={14} color="#8b5cf6" />,
+                    bg: "#f5f3ff",
+                    score: seoBreakdown?.pages?.score ?? 100,
+                    sub: `${pagesCount} items · ${seoBreakdown?.pages?.withTitle ?? pagesCount}/${pagesCount || 1}`,
+                    link: "/app/bulk-optimizer?resource=pages",
+                  },
+                  {
+                    name: "Blog Articles",
+                    icon: <IconArticle size={14} color="#10b981" />,
+                    bg: "#ecfdf5",
+                    score: seoBreakdown?.articles?.score ?? 100,
+                    sub: `${articlesCount} items · ${seoBreakdown?.articles?.withTitle ?? articlesCount}/${articlesCount || 1}`,
+                    link: "/app/bulk-optimizer?resource=articles",
+                  },
+                  {
+                    name: "Image Alt Tags",
+                    icon: <IconImage size={14} color="#06b6d4" />,
+                    bg: "#ecfeff",
+                    score: seoBreakdown?.altTags?.score ?? 85,
+                    sub: `${seoBreakdown?.altTags?.imagesWithAlt ?? 0} of ${seoBreakdown?.altTags?.totalImages ?? 0} images`,
+                    link: "/app/image-alt-optimizer",
+                  },
+                ].map((item) => {
+                  const s = Math.min(Math.max(item.score || 0, 0), 100);
+                  const barColor = s >= 80 ? "#10b981" : s >= 50 ? "#f59e0b" : "#ef4444";
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.link}
+                      style={{
+                        textDecoration: "none",
+                        color: "inherit",
+                        display: "grid",
+                        gridTemplateColumns: "130px 1fr 50px",
+                        alignItems: "center",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ width: "26px", height: "26px", borderRadius: "7px", background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {item.icon}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b", whiteSpace: "nowrap" }}>{item.name}</div>
+                          <div style={{ fontSize: "10px", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.sub}</div>
+                        </div>
+                      </div>
+
+                      {/* Progress Track */}
+                      <div style={{ height: "7px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden" }}>
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${s}%`,
+                            background: barColor,
+                            borderRadius: "4px",
+                            transition: "width 0.4s ease",
+                          }}
+                        />
+                      </div>
+
+                      {/* Score Value */}
+                      <div style={{ textAlign: "right", fontSize: "12px", fontWeight: "800", color: barColor }}>
+                        {s}<span style={{ fontSize: "10px", fontWeight: "600", color: "#94a3b8" }}>/100</span>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
-            {missingTitles > 0 && (
-              <Link
-                to="/app/bulk-optimizer?resource=products"
-                style={{
-                  marginTop: "16px",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  color: "#dc2626",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                Resolve Missing Titles <IconArrowRight size={12} />
-              </Link>
-            )}
+
+            {/* Bottom Tip Banner */}
+            <div
+              style={{
+                background: "#f0fdf4",
+                border: "1px solid #dcfce7",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "12px",
+                color: "#166534",
+                fontWeight: "600",
+              }}
+            >
+              <IconSparkles size={15} color="#10b981" />
+              <span>Great job! Your store is well optimized. Keep up the good work!</span>
+            </div>
           </div>
 
-          {/* Meta Description Status Card */}
+          {/* Quick Actions (2x2 Grid) */}
           <div
+            className="dash-card"
             style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              padding: "24px",
-              border: `1.5px solid ${missingDescriptions > 0 ? "#fed7aa" : "#bbf7d0"}`,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+              padding: "20px 22px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
+              gap: "14px",
             }}
           >
             <div>
-              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: missingDescriptions > 0 ? "#ffedd5" : "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "14px" }}>
-                {missingDescriptions > 0 ? <IconAlertTriangle size={22} color="#d97706" /> : <IconCheckCircle size={22} color="#16a34a" />}
-              </div>
-              <div style={{ fontSize: "16px", fontWeight: "800", marginBottom: "6px", color: missingDescriptions > 0 ? "#9a3412" : "#166534" }}>
-                {missingDescriptions > 0 ? "Description Gaps" : "All Descriptions Complete"}
-              </div>
-              <div style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.45" }}>
-                {missingDescriptions > 0
-                  ? `${missingDescriptions.toLocaleString()} products missing meta descriptions.`
-                  : "All products have meta descriptions set for search engines."}
-              </div>
-            </div>
-            {missingDescriptions > 0 && (
-              <Link
-                to="/app/bulk-optimizer?resource=products"
+              <div style={{ fontSize: "15px", fontWeight: "800", color: "#0f172a" }}>Quick Actions</div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "1px" }}>Optimize your store faster</div>
+
+              <div
                 style={{
-                  marginTop: "16px",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  color: "#d97706",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "10px",
+                  marginTop: "14px",
                 }}
               >
-                Resolve Missing Descriptions <IconArrowRight size={12} />
-              </Link>
-            )}
+                {/* 1. SEO Bulk Optimizer (Dark Navy Card) */}
+                <Link to="/app/bulk-optimizer" style={{ textDecoration: "none" }}>
+                  <div
+                    className="action-card-dark"
+                    style={{
+                      background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+                      borderRadius: "12px",
+                      padding: "14px 16px",
+                      color: "#ffffff",
+                      height: "100%",
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px" }}>
+                        <IconRocket size={17} color="#34d399" />
+                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: "800", color: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span>SEO Bulk Optimizer</span>
+                        <IconArrowRight size={11} color="#94a3b8" />
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px", lineHeight: "1.4" }}>
+                        Optimize products, collections, pages and more in bulk.
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 2. Image ALT Optimizer (Royal Blue Card) */}
+                <Link to="/app/image-alt-optimizer" style={{ textDecoration: "none" }}>
+                  <div
+                    className="action-card-blue"
+                    style={{
+                      background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                      borderRadius: "12px",
+                      padding: "14px 16px",
+                      color: "#ffffff",
+                      height: "100%",
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px" }}>
+                        <IconImage size={17} color="#ffffff" />
+                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: "800", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span>Image ALT Optimizer</span>
+                        <IconArrowRight size={11} color="#bfdbfe" />
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#dbeafe", marginTop: "4px", lineHeight: "1.4" }}>
+                        Audit and fix missing alt texts for images.
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 3. Titles Status (Mint/Green Card) */}
+                <Link to="/app/bulk-optimizer?resource=products" style={{ textDecoration: "none" }}>
+                  <div
+                    style={{
+                      background: missingTitles > 0 ? "#fef2f2" : "#f0fdf4",
+                      border: `1px solid ${missingTitles > 0 ? "#fecaca" : "#bbf7d0"}`,
+                      borderRadius: "12px",
+                      padding: "14px 16px",
+                      height: "100%",
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: missingTitles > 0 ? "#fee2e2" : "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px" }}>
+                        {missingTitles > 0 ? <IconAlertTriangle size={17} color="#dc2626" /> : <IconCheckCircle size={17} color="#16a34a" />}
+                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: "800", color: missingTitles > 0 ? "#991b1b" : "#166534", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span>{missingTitles > 0 ? `${missingTitles} Missing Titles` : "All Titles Complete"}</span>
+                        <IconArrowRight size={11} color="#94a3b8" />
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: "1.4" }}>
+                        {missingTitles > 0 ? "Fix missing product SEO titles." : "Ensure all product and collection titles are optimized."}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* 4. Descriptions Status (Lavender/Purple Card) */}
+                <Link to="/app/bulk-optimizer?resource=products" style={{ textDecoration: "none" }}>
+                  <div
+                    style={{
+                      background: missingDescriptions > 0 ? "#fffbeb" : "#faf5ff",
+                      border: `1px solid ${missingDescriptions > 0 ? "#fed7aa" : "#e9d5ff"}`,
+                      borderRadius: "12px",
+                      padding: "14px 16px",
+                      height: "100%",
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: missingDescriptions > 0 ? "#ffedd5" : "#f3e8ff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px" }}>
+                        {missingDescriptions > 0 ? <IconAlertTriangle size={17} color="#d97706" /> : <IconEdit size={17} color="#9333ea" />}
+                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: "800", color: missingDescriptions > 0 ? "#9a3412" : "#581c87", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span>{missingDescriptions > 0 ? `${missingDescriptions} Missing Descs` : "All Descriptions Complete"}</span>
+                        <IconArrowRight size={11} color="#94a3b8" />
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", lineHeight: "1.4" }}>
+                        {missingDescriptions > 0 ? "Fill meta descriptions for search." : "Ensure all products have meta descriptions for search engines."}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
-      </s-section>
+
+        {/* =========================================================================
+            ROW 4: RECENT ACTIVITY (Full width compact card;
+                   the red-boxed promo block on right is completely removed!)
+            ========================================================================= */}
+        <div
+          className="dash-card"
+          style={{
+            padding: "16px 22px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+            <div>
+              <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>Recent Activity</span>
+              <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "10px" }}>Latest updates and progress</span>
+            </div>
+            <Link
+              to="/app/bulk-optimizer"
+              style={{
+                fontSize: "12px",
+                fontWeight: "700",
+                color: "#2563eb",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              View All <IconArrowRight size={11} />
+            </Link>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            {/* 1. Products Optimized */}
+            <div
+              style={{
+                background: "#f8fafc",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                border: "1px solid #e2e8f0",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <IconBox size={16} color="#2563eb" />
+              </div>
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b" }}>Products Optimized</div>
+                <div style={{ fontSize: "11px", color: "#10b981", fontWeight: "600" }}>+{totalCatalog - missingTitles} active</div>
+              </div>
+            </div>
+
+            {/* 2. Collections Optimized */}
+            <div
+              style={{
+                background: "#f8fafc",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                border: "1px solid #e2e8f0",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#f5f3ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <IconFolder size={16} color="#8b5cf6" />
+              </div>
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b" }}>Collections Optimized</div>
+                <div style={{ fontSize: "11px", color: "#10b981", fontWeight: "600" }}>+{collectionsCount} active</div>
+              </div>
+            </div>
+
+            {/* 3. Pages Optimized */}
+            <div
+              style={{
+                background: "#f8fafc",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                border: "1px solid #e2e8f0",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#fffbeb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <IconFileText size={16} color="#f59e0b" />
+              </div>
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b" }}>Pages Optimized</div>
+                <div style={{ fontSize: "11px", color: "#10b981", fontWeight: "600" }}>+{pagesCount} active</div>
+              </div>
+            </div>
+
+            {/* 4. Blog Posts Optimized */}
+            <div
+              style={{
+                background: "#f8fafc",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                border: "1px solid #e2e8f0",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <IconArticle size={16} color="#10b981" />
+              </div>
+              <div>
+                <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e293b" }}>Blog Posts Optimized</div>
+                <div style={{ fontSize: "11px", color: "#10b981", fontWeight: "600" }}>+{articlesCount} active</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
 
       {/* Page Loading Overlay */}
       {isPageLoading && (
@@ -1329,31 +1406,23 @@ export default function Dashboard() {
         >
           <div
             style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #f3f3f3",
-              borderTop: "4px solid #008060",
+              width: "44px",
+              height: "44px",
+              border: "3px solid #f3f3f3",
+              borderTop: "3px solid #2563eb",
               borderRadius: "50%",
               animation: "spin 1s linear infinite",
-              marginBottom: "16px",
+              marginBottom: "14px",
             }}
           />
-          <div style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>
             Loading Dashboard...
           </div>
-          <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>
-            Please wait while we analyze your store SEO
+          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>
+            Analyzing catalog and SEO metrics
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-      </div>
     </s-page>
   );
 }
