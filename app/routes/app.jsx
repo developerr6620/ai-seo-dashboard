@@ -1,9 +1,22 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useRouteError, redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
+  const url = new URL(request.url);
+
+  // If visited directly in a browser tab without Shopify Admin context,
+  // redirect gracefully to the marketing landing page
+  if (
+    !url.searchParams.has("shop") &&
+    !url.searchParams.has("host") &&
+    !url.searchParams.has("id_token") &&
+    !url.searchParams.has("embedded")
+  ) {
+    return redirect("/");
+  }
+
   await authenticate.admin(request);
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
