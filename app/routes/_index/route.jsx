@@ -24,9 +24,12 @@ export const loader = async ({ request }) => {
 
   // Standalone browser visitor at https://seooptimizer.zooq.app -> serve the public marketing & install website
   try {
-    const htmlPath = path.resolve(process.cwd(), "public", "index.html");
-    if (fs.existsSync(htmlPath)) {
-      const html = fs.readFileSync(htmlPath, "utf-8");
+    const buildClientPath = path.resolve(process.cwd(), "build", "client", "index.html");
+    const publicPath = path.resolve(process.cwd(), "public", "index.html");
+    const targetPath = fs.existsSync(buildClientPath) ? buildClientPath : publicPath;
+
+    if (fs.existsSync(targetPath)) {
+      const html = fs.readFileSync(targetPath, "utf-8");
       return new Response(html, {
         headers: {
           "Content-Type": "text/html; charset=utf-8",
@@ -34,7 +37,7 @@ export const loader = async ({ request }) => {
       });
     }
   } catch (err) {
-    console.error("Failed to read public/index.html:", err);
+    console.error("Failed to read index.html:", err);
   }
 
   return redirect(`/app${url.search}`);
