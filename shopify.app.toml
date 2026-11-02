@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "cdeb2fd429e5b0cceb3d43906b7f2148"
-name = "AI SEO Dashboard"
+name = "SEO Assistant"
 application_url = "https://seooptimizer.zooq.app"
 embedded = true
 

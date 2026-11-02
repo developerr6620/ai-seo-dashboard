@@ -92,7 +92,7 @@ export default function Auth() {
         </div>
 
         <h1 style={{ fontSize: "24px", fontWeight: "800", color: "#0f172a", marginBottom: "8px", letterSpacing: "-0.4px" }}>
-          Log in to AI SEO Dashboard
+          Log in to SEO Assistant
         </h1>
         <p style={{ fontSize: "14.5px", color: "#64748b", marginBottom: "28px", lineHeight: "1.5" }}>
           Enter your Shopify store domain to access your SEO tools and live score audits.

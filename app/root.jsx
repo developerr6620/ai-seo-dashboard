@@ -74,7 +74,7 @@ export function ErrorBoundary() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>AI SEO Dashboard</title>
+        <title>SEO Assistant</title>
         <style>{`
           body {
             margin: 0;
@@ -119,7 +119,7 @@ export function ErrorBoundary() {
             </svg>
           </div>
           <h2 style={{ fontSize: "20px", fontWeight: "700", color: "#0f172a", margin: "0 0 8px 0" }}>
-            AI SEO Dashboard
+            SEO Assistant
           </h2>
           <p style={{ fontSize: "14px", color: "#64748b", lineHeight: "1.5", margin: 0 }}>
             Connect your Shopify store or open the app directly from your Shopify Admin panel.
