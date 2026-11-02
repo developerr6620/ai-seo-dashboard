@@ -4,21 +4,27 @@ import { landingHtml } from "./landingHtml";
 
 /**
  * Root Route:
- * - When accessed from inside Shopify Admin (has ?shop, ?host, ?embedded, ?id_token),
+ * - When accessed from inside Shopify Admin (iframe, referer, ?shop, ?host, ?embedded, ?id_token),
  *   seamlessly forwards to the embedded App Dashboard (/app).
  * - When visited directly in a web browser (https://seooptimizer.zooq.app/),
  *   serves the complete feature showcase website with the interactive "Install App" popup modal.
  */
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
+  const referer = request.headers.get("referer") || "";
+  const secFetchDest = request.headers.get("sec-fetch-dest") || "";
 
-  // If inside Shopify Admin, send directly to the executive dashboard
-  if (
-    url.searchParams.get("shop") ||
-    url.searchParams.get("host") ||
-    url.searchParams.get("embedded") ||
-    url.searchParams.get("id_token")
-  ) {
+  // Comprehensive check for Shopify Admin context
+  const isEmbeddedShopify =
+    secFetchDest === "iframe" ||
+    referer.includes("admin.shopify.com") ||
+    referer.includes("myshopify.com") ||
+    url.searchParams.has("shop") ||
+    url.searchParams.has("host") ||
+    url.searchParams.has("embedded") ||
+    url.searchParams.has("id_token");
+
+  if (isEmbeddedShopify) {
     return redirect(`/app${url.search}`);
   }
 
@@ -32,6 +38,12 @@ export const loader = async ({ request }) => {
 
 export default function LandingPage() {
   useEffect(() => {
+    // If rendered inside Shopify Admin iframe, instantly forward to /app
+    if (typeof window !== "undefined" && window.top !== window.self) {
+      window.location.replace("/app" + window.location.search);
+      return;
+    }
+
     // Client-side fallback script initialization
     const modal = document.getElementById("installModal");
     const closeBtn = document.getElementById("closeInstallModal");

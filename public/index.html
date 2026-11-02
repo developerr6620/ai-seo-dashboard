@@ -9,6 +9,12 @@
   <meta property="og:title" content="AI SEO Optimizer for Shopify | Bulk Titles, Meta Descriptions & ALT Text">
   <meta property="og:description" content="Generate SEO titles, meta descriptions, keywords, and image ALT text for your entire Shopify store with 1 click.">
   <meta property="og:type" content="website">
+  <script>
+    // If opened inside Shopify Admin iframe, instantly forward to the Executive Dashboard
+    if (window.top !== window.self) {
+      window.location.replace('/app' + window.location.search);
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
