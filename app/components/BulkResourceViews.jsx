@@ -79,7 +79,7 @@ export function BulkResourceTable({
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return items.filter((item) => {
+    const result = items.filter((item) => {
       const match =
         !q ||
         item.title?.toLowerCase().includes(q) ||
@@ -97,6 +97,32 @@ export function BulkResourceTable({
       if (filterMode === "missing-desc") return !hasD || retainedIds.has(item.id);
       if (filterMode === "optimized") return hasT && hasD && isTitleOk(t) && isDescOk(d);
       return true;
+    });
+
+    // Sort: All missing items appear at the very top of the list
+    return result.sort((a, b) => {
+      const getPriority = (item) => {
+        const t = (item.seoTitle || "").trim();
+        const d = (item.seoDescription || "").trim();
+        const isRetained = retainedIds.has(item.id);
+
+        // Missing both title & description -> highest priority at top (4)
+        if (!t && !d) return 4;
+        // Missing either title or description -> high priority (3)
+        if (!t || !d) return 3;
+        // Just generated in current view session -> keep near top (2)
+        if (isRetained) return 2;
+
+        const currT = getTitle(item).trim();
+        const currD = getDesc(item).trim();
+        if (!currT || !currD) return 3;
+        if (!isTitleOk(currT) || !isDescOk(currD)) return 1;
+
+        // Fully optimized items appear below (0)
+        return 0;
+      };
+
+      return getPriority(b) - getPriority(a);
     });
   }, [items, searchQuery, filterMode, drafts, retainedIds]);
 

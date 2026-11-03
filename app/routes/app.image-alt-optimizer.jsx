@@ -416,21 +416,27 @@ export default function ImageAltOptimizer() {
     return 0;
   }, [activeTab, products, files, collections, draftProductAlts, draftFileAlts, draftCollectionAlts]);
 
-  // Filtered lists
+  // Filtered lists with missing items sorted to top
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return products.filter((p) => {
+    const res = products.filter((p) => {
       const match = !q || p.title.toLowerCase().includes(q) || p.handle.toLowerCase().includes(q);
       if (!match) return false;
       if (filterMode === "missing") return p.media.some((m) => !getProductAlt(m.id, m.alt).trim());
       if (filterMode === "optimized") return p.media.length > 0 && p.media.every((m) => Boolean(getProductAlt(m.id, m.alt).trim()));
       return true;
     });
+
+    return res.sort((a, b) => {
+      const aMissing = a.media.filter((m) => !getProductAlt(m.id, m.alt).trim()).length;
+      const bMissing = b.media.filter((m) => !getProductAlt(m.id, m.alt).trim()).length;
+      return bMissing - aMissing;
+    });
   }, [products, searchQuery, filterMode, getProductAlt]);
 
   const filteredFiles = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return files.filter((f) => {
+    const res = files.filter((f) => {
       const match = !q || f.filename.toLowerCase().includes(q) || f.url.toLowerCase().includes(q);
       if (!match) return false;
       const val = getFileAlt(f.id, f.alt).trim();
@@ -438,17 +444,29 @@ export default function ImageAltOptimizer() {
       if (filterMode === "optimized") return Boolean(val);
       return true;
     });
+
+    return res.sort((a, b) => {
+      const aMissing = !getFileAlt(a.id, a.alt).trim() ? 1 : 0;
+      const bMissing = !getFileAlt(b.id, b.alt).trim() ? 1 : 0;
+      return bMissing - aMissing;
+    });
   }, [files, searchQuery, filterMode, getFileAlt]);
 
   const filteredCollections = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return collections.filter((c) => {
+    const res = collections.filter((c) => {
       const match = !q || c.title.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q);
       if (!match) return false;
       const val = getCollectionAlt(c.id, c.alt).trim();
       if (filterMode === "missing") return !val;
       if (filterMode === "optimized") return Boolean(val);
       return true;
+    });
+
+    return res.sort((a, b) => {
+      const aMissing = !getCollectionAlt(a.id, a.alt).trim() ? 1 : 0;
+      const bMissing = !getCollectionAlt(b.id, b.alt).trim() ? 1 : 0;
+      return bMissing - aMissing;
     });
   }, [collections, searchQuery, filterMode, getCollectionAlt]);
 
