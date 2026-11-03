@@ -126,15 +126,15 @@ export function BulkResourceTable({
     };
   }, [items, drafts, pagination]);
 
-  const handleGenerate = async (targetItems) => {
+  const handleGenerate = (targetItems) => {
     if (targetItems.length === 0) return;
     setIsGenerating(true);
 
-    const generatedMap = {};
+    const newDrafts = { ...drafts };
     const newRetained = new Set(retainedIds);
     targetItems.forEach((item) => {
       const generated = generateFn(item, storeName);
-      generatedMap[item.id] = {
+      newDrafts[item.id] = {
         seoTitle: generated.title,
         seoDescription: generated.description,
         keywords: generated.keywords || [],
@@ -142,140 +142,40 @@ export function BulkResourceTable({
       newRetained.add(item.id);
     });
 
+    setDrafts(newDrafts);
     setRetainedIds(newRetained);
-
-    // Save directly to Shopify so the items are immediately published with no extra step
-    try {
-      const payloadItems = targetItems.map((item) => {
-        const gen = generatedMap[item.id];
-        return {
-          id: item.id,
-          productId: item.id,
-          collectionId: item.id,
-          pageId: item.id,
-          articleId: item.id,
-          seoTitle: gen.seoTitle,
-          seoDescription: gen.seoDescription,
-          keywords: gen.keywords,
-        };
-      });
-
-      const res = await fetch("/api/save-seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceType, items: payloadItems }),
-      });
-      const d = await res.json();
-
-      setItems((prev) =>
-        prev.map((item) => {
-          if (generatedMap[item.id]) {
-            return {
-              ...item,
-              seoTitle: generatedMap[item.id].seoTitle,
-              seoDescription: generatedMap[item.id].seoDescription,
-              keywords: generatedMap[item.id].keywords,
-              hasCustomSeoTitle: true,
-            };
-          }
-          return item;
-        })
-      );
-
-      // Clean up drafts so "Save to Shopify" button does NOT show up
-      setDrafts((prev) => {
-        const next = { ...prev };
-        targetItems.forEach((item) => delete next[item.id]);
-        return next;
-      });
-
-      // Clear selection of generated items
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        targetItems.forEach((item) => next.delete(item.id));
-        return next;
-      });
-
-      onNotify?.(`Optimized and saved ${targetItems.length} items to Shopify!`);
-    } catch (err) {
-      console.error("Auto-save generated SEO error:", err);
-      // Fallback: put in drafts if network failed
-      setDrafts((prev) => ({ ...prev, ...generatedMap }));
-      onNotify?.(`Generated SEO for ${targetItems.length} items.`);
-    } finally {
-      setIsGenerating(false);
-    }
+    setIsGenerating(false);
+    onNotify?.(`Generated SEO for ${targetItems.length} items! Review & click "Save to Shopify".`);
   };
 
-  const handleGenerateSingle = async (item) => {
+  const handleGenerateSingle = (item) => {
     setIsGenerating(true);
     const generated = generateFn(item, storeName);
     const newRetained = new Set(retainedIds);
     newRetained.add(item.id);
+
+    setDrafts((prev) => ({
+      ...prev,
+      [item.id]: {
+        seoTitle: generated.title,
+        seoDescription: generated.description,
+        keywords: generated.keywords || [],
+      },
+    }));
     setRetainedIds(newRetained);
-
-    try {
-      const res = await fetch("/api/save-seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resourceType,
-          items: [
-            {
-              id: item.id,
-              productId: item.id,
-              collectionId: item.id,
-              pageId: item.id,
-              articleId: item.id,
-              seoTitle: generated.title,
-              seoDescription: generated.description,
-              keywords: generated.keywords || [],
-            },
-          ],
-        }),
-      });
-      const d = await res.json();
-
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === item.id
-            ? {
-                ...i,
-                seoTitle: generated.title,
-                seoDescription: generated.description,
-                keywords: generated.keywords || [],
-                hasCustomSeoTitle: true,
-              }
-            : i
-        )
-      );
-
-      setDrafts((prev) => {
-        const next = { ...prev };
-        delete next[item.id];
-        return next;
-      });
-
-      onNotify?.(`Optimized and saved "${item.title}" to Shopify!`);
-    } catch (err) {
-      console.error("Single generate error:", err);
-      setDrafts((prev) => ({
-        ...prev,
-        [item.id]: {
-          seoTitle: generated.title,
-          seoDescription: generated.description,
-          keywords: generated.keywords || [],
-        },
-      }));
-    } finally {
-      setIsGenerating(false);
-    }
+    setIsGenerating(false);
+    onNotify?.(`Generated AI SEO for "${item.title}". Click "Save to Shopify" to publish.`);
   };
 
   const handleSave = async (itemsToSave) => {
     if (itemsToSave.length === 0) return;
     setIsSaving(true);
     setSaveProgress({ current: 0, total: itemsToSave.length });
+
+    // Ensure items remain visible in the current view even after being saved
+    const newRetained = new Set(retainedIds);
+    itemsToSave.forEach((item) => newRetained.add(item.id));
+    setRetainedIds(newRetained);
 
     const CHUNK = 10;
     let savedCount = 0;
