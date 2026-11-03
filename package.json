@@ -1,5 +1,5 @@
 {
-  "name": "ai-seo-dashboard",
+  "name": "seo-assistant",
   "private": true,
   "scripts": {
     "build": "react-router build",

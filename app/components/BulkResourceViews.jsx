@@ -52,6 +52,7 @@ export function BulkResourceTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [retainedIds, setRetainedIds] = useState(new Set());
   const [drafts, setDrafts] = useState({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,12 +92,13 @@ export function BulkResourceTable({
       const hasT = Boolean(t.trim());
       const hasD = Boolean(d.trim());
 
-      if (filterMode === "missing-title") return !hasT;
-      if (filterMode === "missing-desc") return !hasD;
+      // If item was generated in the current view session, retain it so it doesn't disappear
+      if (filterMode === "missing-title") return !hasT || retainedIds.has(item.id);
+      if (filterMode === "missing-desc") return !hasD || retainedIds.has(item.id);
       if (filterMode === "optimized") return hasT && hasD && isTitleOk(t) && isDescOk(d);
       return true;
     });
-  }, [items, searchQuery, filterMode, drafts]);
+  }, [items, searchQuery, filterMode, drafts, retainedIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -124,38 +126,150 @@ export function BulkResourceTable({
     };
   }, [items, drafts, pagination]);
 
-  const handleGenerate = (targetItems) => {
+  const handleGenerate = async (targetItems) => {
     if (targetItems.length === 0) return;
     setIsGenerating(true);
 
-    const newDrafts = { ...drafts };
+    const generatedMap = {};
+    const newRetained = new Set(retainedIds);
     targetItems.forEach((item) => {
       const generated = generateFn(item, storeName);
-      newDrafts[item.id] = {
+      generatedMap[item.id] = {
         seoTitle: generated.title,
         seoDescription: generated.description,
         keywords: generated.keywords || [],
       };
+      newRetained.add(item.id);
     });
 
-    setDrafts(newDrafts);
-    setIsGenerating(false);
-    onNotify?.(`Generated SEO & Keywords for ${targetItems.length} items! Review & click "Save to Shopify".`);
+    setRetainedIds(newRetained);
+
+    // Save directly to Shopify so the items are immediately published with no extra step
+    try {
+      const payloadItems = targetItems.map((item) => {
+        const gen = generatedMap[item.id];
+        return {
+          id: item.id,
+          productId: item.id,
+          collectionId: item.id,
+          pageId: item.id,
+          articleId: item.id,
+          seoTitle: gen.seoTitle,
+          seoDescription: gen.seoDescription,
+          keywords: gen.keywords,
+        };
+      });
+
+      const res = await fetch("/api/save-seo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceType, items: payloadItems }),
+      });
+      const d = await res.json();
+
+      setItems((prev) =>
+        prev.map((item) => {
+          if (generatedMap[item.id]) {
+            return {
+              ...item,
+              seoTitle: generatedMap[item.id].seoTitle,
+              seoDescription: generatedMap[item.id].seoDescription,
+              keywords: generatedMap[item.id].keywords,
+              hasCustomSeoTitle: true,
+            };
+          }
+          return item;
+        })
+      );
+
+      // Clean up drafts so "Save to Shopify" button does NOT show up
+      setDrafts((prev) => {
+        const next = { ...prev };
+        targetItems.forEach((item) => delete next[item.id]);
+        return next;
+      });
+
+      // Clear selection of generated items
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        targetItems.forEach((item) => next.delete(item.id));
+        return next;
+      });
+
+      onNotify?.(`Optimized and saved ${targetItems.length} items to Shopify!`);
+    } catch (err) {
+      console.error("Auto-save generated SEO error:", err);
+      // Fallback: put in drafts if network failed
+      setDrafts((prev) => ({ ...prev, ...generatedMap }));
+      onNotify?.(`Generated SEO for ${targetItems.length} items.`);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const handleGenerateSingle = (item) => {
+  const handleGenerateSingle = async (item) => {
     setIsGenerating(true);
     const generated = generateFn(item, storeName);
-    setDrafts((prev) => ({
-      ...prev,
-      [item.id]: {
-        seoTitle: generated.title,
-        seoDescription: generated.description,
-        keywords: generated.keywords || [],
-      },
-    }));
-    setIsGenerating(false);
-    onNotify?.(`Generated AI SEO for "${item.title}". Click "Save to Shopify" to publish.`);
+    const newRetained = new Set(retainedIds);
+    newRetained.add(item.id);
+    setRetainedIds(newRetained);
+
+    try {
+      const res = await fetch("/api/save-seo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceType,
+          items: [
+            {
+              id: item.id,
+              productId: item.id,
+              collectionId: item.id,
+              pageId: item.id,
+              articleId: item.id,
+              seoTitle: generated.title,
+              seoDescription: generated.description,
+              keywords: generated.keywords || [],
+            },
+          ],
+        }),
+      });
+      const d = await res.json();
+
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === item.id
+            ? {
+                ...i,
+                seoTitle: generated.title,
+                seoDescription: generated.description,
+                keywords: generated.keywords || [],
+                hasCustomSeoTitle: true,
+              }
+            : i
+        )
+      );
+
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+
+      onNotify?.(`Optimized and saved "${item.title}" to Shopify!`);
+    } catch (err) {
+      console.error("Single generate error:", err);
+      setDrafts((prev) => ({
+        ...prev,
+        [item.id]: {
+          seoTitle: generated.title,
+          seoDescription: generated.description,
+          keywords: generated.keywords || [],
+        },
+      }));
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSave = async (itemsToSave) => {
@@ -498,7 +612,10 @@ export function BulkResourceTable({
               <button
                 key={f.id}
                 type="button"
-                onClick={() => setFilterMode(f.id)}
+                onClick={() => {
+                  setFilterMode(f.id);
+                  setRetainedIds(new Set());
+                }}
                 style={{
                   background: isSel ? "#0f172a" : "#ffffff",
                   color: isSel ? "#ffffff" : "#64748b",
@@ -850,7 +967,26 @@ export function BulkResourceTable({
 
                     {/* Status Badge */}
                     <td style={{ padding: "12px 10px", verticalAlign: "top", textAlign: "center" }}>
-                      {dirty ? (
+                      {titleLen > 0 && descLen > 0 && titleLen <= TITLE_MAX && descLen <= DESC_MAX ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            background: "#ecfdf5",
+                            color: "#059669",
+                            border: "1px solid #a7f3d0",
+                            padding: "3px 9px",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981" }} />
+                          Optimized
+                        </span>
+                      ) : dirty ? (
                         <span
                           style={{
                             display: "inline-block",
@@ -865,22 +1001,6 @@ export function BulkResourceTable({
                           }}
                         >
                           Unsaved
-                        </span>
-                      ) : titleLen > 0 && descLen > 0 && titleLen <= TITLE_MAX && descLen <= DESC_MAX ? (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            background: "#ecfdf5",
-                            color: "#059669",
-                            border: "1px solid #a7f3d0",
-                            padding: "3px 9px",
-                            borderRadius: "6px",
-                            fontSize: "11px",
-                            fontWeight: "700",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Optimized
                         </span>
                       ) : (
                         <span

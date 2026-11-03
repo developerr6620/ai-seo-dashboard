@@ -1117,7 +1117,7 @@ export default function ImageAltOptimizer() {
   };
 
   return (
-    <s-page heading="Storewide Image ALT Optimizer">
+    <s-page heading="SEO Assistant - Storewide Image ALT Optimizer">
       <div style={{ maxWidth: "1200px", margin: "0 auto", paddingBottom: "60px" }}>
         {/* Navigation Breadcrumb */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "12px" }}>

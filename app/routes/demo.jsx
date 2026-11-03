@@ -337,7 +337,7 @@ export default function DemoPage() {
           </div>
           <div>
             <div style={{ fontSize: "16px", fontWeight: "700", color: "#202223" }}>
-              AI SEO Dashboard <span style={{ fontSize: "12px", fontWeight: "500", color: "#6d7175" }}>(Demo Store)</span>
+              SEO Assistant <span style={{ fontSize: "12px", fontWeight: "500", color: "#6d7175" }}>(Demo Store)</span>
             </div>
             <div style={{ fontSize: "12px", color: "#6d7175" }}>
               Store: demo-boutique.myshopify.com

@@ -602,7 +602,7 @@ export default function BulkOptimizer() {
   }, []);
 
   return (
-    <s-page inline-size="large" inlineSize="large" full-width heading="1-Click Bulk SEO Optimizer">
+    <s-page inline-size="large" inlineSize="large" full-width heading="SEO Assistant - Bulk SEO Optimizer">
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
