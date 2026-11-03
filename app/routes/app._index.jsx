@@ -31,17 +31,25 @@ export const loader = async ({ request }) => {
   // Guarantee that the Target SEO Keywords definition is registered & pinned in Shopify
   await ensureKeywordsMetafieldDefinition(admin, shopName);
 
-  // Helper: compute category score 0–100 (title=40%, desc=35%, keywords=25%)
+  // Helper: compute category score 0–100 (Title=50%, Description=50%)
   function catScore(items) {
     const n = items.length;
     if (n === 0) return null; // null = no items, excluded from global score
     const withTitle = items.filter((i) => i.seo?.title?.trim()).length;
     const withDesc = items.filter((i) => i.seo?.description?.trim()).length;
+    const withBoth = items.filter((i) => i.seo?.title?.trim() && i.seo?.description?.trim()).length;
     const withKw = items.filter((i) => {
       const v = i.keywordsMetafield?.value;
       return Boolean(v && v.trim().length > 0 && v !== "[]" && v !== '""');
     }).length;
-    const score = Math.round(((withTitle / n) * 40 + (withDesc / n) * 35 + (withKw / n) * 25));
+
+    // If all items have both SEO Title and SEO Description, category is 100% fully optimized
+    if (withBoth === n) {
+      return { score: 100, total: n, withTitle, withDesc, withKw };
+    }
+
+    // In Shopify SEO, Title (50%) and Description (50%) are the primary search ranking factors
+    const score = Math.min(100, Math.round(((withTitle / n) * 50 + (withDesc / n) * 50)));
     return { score, total: n, withTitle, withDesc, withKw };
   }
 

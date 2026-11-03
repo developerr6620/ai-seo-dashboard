@@ -78,7 +78,7 @@ export function computeMetrics(
   const keywordCoveragePct = total > 0 ? Math.round((keywords / total) * 100) : 0;
 
   const seoScore = total > 0
-    ? Math.round(((titles + descs + keywords) / (total * 3)) * 100)
+    ? Math.min(100, Math.round(((titles + descs) / (total * 2)) * 100))
     : 0;
 
   return {
