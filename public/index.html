@@ -20,26 +20,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #7c3aed;
-      --primary-dark: #6d28d9;
-      --primary-light: #8b5cf6;
-      --primary-subtle: #f5f3ff;
-      --secondary: #6366f1;
+      --primary: #059669;
+      --primary-dark: #047857;
+      --primary-light: #10b981;
+      --primary-subtle: #ecfdf5;
+      --secondary: #0d9488;
       --accent: #10b981;
       --dark: #0f172a;
       --slate: #334155;
       --muted: #64748b;
       --light-gray: #f8fafc;
       --border: #e2e8f0;
-      --border-purple: #e9d5ff;
+      --border-purple: #a7f3d0;
       --radius-sm: 8px;
       --radius-md: 14px;
       --radius-lg: 20px;
       --radius-xl: 28px;
       --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
-      --shadow-md: 0 4px 20px -2px rgba(124, 58, 237, 0.08);
-      --shadow-lg: 0 10px 30px -4px rgba(124, 58, 237, 0.12);
-      --shadow-glow: 0 0 40px rgba(124, 58, 237, 0.2);
+      --shadow-md: 0 4px 20px -2px rgba(16, 185, 129, 0.10);
+      --shadow-lg: 0 10px 30px -4px rgba(16, 185, 129, 0.15);
+      --shadow-glow: 0 0 40px rgba(16, 185, 129, 0.25);
     }
 
     * {
@@ -107,7 +107,7 @@
       align-items: center;
       justify-content: center;
       color: #ffffff;
-      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
     }
 
     .nav-links {
@@ -154,12 +154,12 @@
     .btn-primary {
       background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
       color: #ffffff;
-      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
     }
 
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
     }
 
     .btn-secondary {
@@ -231,7 +231,7 @@
     /* HERO SECTION */
     section.hero-section {
       padding: 40px 0 90px 0;
-      background: radial-gradient(circle at 50% 10%, rgba(245, 243, 255, 0.9) 0%, rgba(255, 255, 255, 1) 70%);
+      background: radial-gradient(circle at 50% 10%, rgba(236, 253, 245, 0.9) 0%, rgba(255, 255, 255, 1) 70%);
       position: relative;
       overflow: hidden;
     }
@@ -252,7 +252,7 @@
     }
 
     .hero-content h1 .gradient-text {
-      background: linear-gradient(135deg, var(--primary) 0%, #a855f7 50%, var(--secondary) 100%);
+      background: linear-gradient(135deg, #059669 0%, #10b981 50%, #0d9488 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -298,7 +298,7 @@
       position: relative;
       border-radius: var(--radius-xl);
       padding: 10px;
-      background: linear-gradient(180deg, rgba(233, 213, 255, 0.6) 0%, rgba(255, 255, 255, 0.8) 100%);
+      background: linear-gradient(180deg, rgba(167, 243, 208, 0.6) 0%, rgba(255, 255, 255, 0.8) 100%);
       box-shadow: var(--shadow-glow), 0 20px 50px -10px rgba(15, 23, 42, 0.12);
       max-width: 920px;
       margin-left: auto;
@@ -316,7 +316,7 @@
     /* PROBLEM -> SOLUTION STRIP */
     section.problem-solution {
       padding: 90px 0;
-      background: #faf8ff;
+      background: #f0fdf4;
       border-top: 1px solid var(--border-purple);
       border-bottom: 1px solid var(--border-purple);
     }
@@ -360,7 +360,7 @@
     }
 
     .solution-banner {
-      background: linear-gradient(135deg, var(--dark) 0%, #1e1b4b 100%);
+      background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
       color: #ffffff;
       padding: 32px 36px;
       border-radius: var(--radius-lg);
@@ -380,7 +380,7 @@
       font-size: 12px;
       font-weight: 800;
       letter-spacing: 0.8px;
-      color: #a78bfa;
+      color: #34d399;
       text-transform: uppercase;
       margin-bottom: 6px;
     }
@@ -405,7 +405,7 @@
       overflow: hidden;
       box-shadow: var(--shadow-lg);
       border: 1px solid var(--border-purple);
-      background: #faf8ff;
+      background: #f0fdf4;
       padding: 12px;
     }
 
@@ -423,7 +423,7 @@
     }
 
     section.feature-section:nth-child(even) {
-      background: #fbfaff;
+      background: #f6fef9;
     }
 
     .feature-layout {
@@ -512,7 +512,7 @@
       position: relative;
       border-radius: var(--radius-lg);
       padding: 10px;
-      background: linear-gradient(135deg, rgba(245, 243, 255, 0.8) 0%, rgba(255, 255, 255, 0.9) 100%);
+      background: linear-gradient(135deg, rgba(236, 253, 245, 0.8) 0%, rgba(255, 255, 255, 0.9) 100%);
       border: 1px solid var(--border-purple);
       box-shadow: var(--shadow-lg);
     }
@@ -528,7 +528,7 @@
     /* BENEFITS GRID */
     section.benefits-section {
       padding: 100px 0;
-      background: #faf8ff;
+      background: #f0fdf4;
       border-top: 1px solid var(--border);
     }
 
@@ -653,7 +653,7 @@
     /* FINAL CTA */
     section.final-cta {
       padding: 100px 0;
-      background: linear-gradient(135deg, var(--dark) 0%, #1e1b4b 60%, #31104b 100%);
+      background: linear-gradient(135deg, #022c22 0%, #064e3b 60%, #047857 100%);
       color: #ffffff;
       text-align: center;
       position: relative;
@@ -774,11 +774,11 @@
       width: 100%;
       max-width: 580px;
       background: #ffffff;
-      border: 1px solid #ede9fe;
+      border: 1px solid #a7f3d0;
       border-radius: 24px;
       padding: 44px 38px 36px 38px;
       text-align: center;
-      box-shadow: 0 25px 60px -12px rgba(124, 58, 237, 0.25), 0 10px 24px -6px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 25px 60px -12px rgba(16, 185, 129, 0.20), 0 10px 24px -6px rgba(0, 0, 0, 0.08);
       transform: translateY(16px) scale(0.96);
       transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -864,7 +864,7 @@
     .install-card-input:focus {
       border-color: var(--primary);
       background: #ffffff;
-      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
     }
 
     .install-card-submit {
@@ -1568,7 +1568,7 @@
       <div class="cta-box">
         <h2>Ready to Make Your Store Search-Ready?</h2>
         <p>SEO Assistant audits your entire catalog, writes missing metadata with AI, and keeps your store search-optimized.</p>
-        <button type="button" class="btn btn-primary btn-lg open-install-modal" style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 32px; border-radius: var(--radius-sm); background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: #ffffff; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35); border: none; cursor: pointer;">
+        <button type="button" class="btn btn-primary btn-lg open-install-modal" style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 32px; border-radius: var(--radius-sm); background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #ffffff; font-weight: 700; font-size: 15px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35); border: none; cursor: pointer;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
           </svg>
