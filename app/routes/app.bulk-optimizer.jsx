@@ -744,7 +744,7 @@ export default function BulkOptimizer() {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "8px",
+              gap: "10px",
               color: "#0f172a",
               textDecoration: "none",
               fontSize: "15px",
@@ -752,6 +752,7 @@ export default function BulkOptimizer() {
             }}
           >
             <span style={{ color: "#64748b" }}>←</span>
+            <img src="/app-logo.jpg" alt="Logo" style={{ width: "28px", height: "28px", borderRadius: "8px", objectFit: "cover", boxShadow: "0 1px 4px rgba(16, 185, 129, 0.25)" }} />
             <span>Bulk SEO Optimizer</span>
           </Link>
         </div>

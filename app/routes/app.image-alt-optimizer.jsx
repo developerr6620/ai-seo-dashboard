@@ -1140,6 +1140,7 @@ export default function ImageAltOptimizer() {
         {/* Navigation Breadcrumb */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <img src="/app-logo.jpg" alt="Logo" style={{ width: "24px", height: "24px", borderRadius: "6px", objectFit: "cover" }} />
             <Link to="/app" style={{ color: "#2563eb", textDecoration: "none", fontSize: "13px", fontWeight: "600" }}>
               ← Back to Dashboard
             </Link>

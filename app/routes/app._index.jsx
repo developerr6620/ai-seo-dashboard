@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getStoreAuditStats } from "../lib/storeAudit.server";
 import { ensureKeywordsMetafieldDefinition } from "../lib/metafieldDefinitions.server";
+import { fitComplete } from "../lib/seoCopy";
 import {
   IconBox,
   IconFolder,
@@ -78,6 +79,15 @@ export const loader = async ({ request }) => {
                 title
                 description
               }
+              titleTag: metafield(namespace: "global", key: "title_tag") {
+                value
+              }
+              seoTitleMetafield: metafield(namespace: "seo", key: "title") {
+                value
+              }
+              seoDesc: metafield(namespace: "global", key: "description_tag") {
+                value
+              }
               keywordsMetafield: metafield(namespace: "seo", key: "keywords") {
                 value
               }
@@ -98,7 +108,19 @@ export const loader = async ({ request }) => {
     const data = await response.json();
     const shop = data?.data?.shop || {};
     const totalProducts = data?.data?.productsCount?.count || 0;
-    const sampleProducts = data?.data?.products?.edges?.map((e) => e.node) || [];
+    const rawProducts = data?.data?.products?.edges?.map((e) => e.node) || [];
+    const sampleProducts = rawProducts.map((p) => {
+      const rawTitle = p.seo?.title || p.seoTitleMetafield?.value || p.titleTag?.value || "";
+      const rawDesc = p.seo?.description || p.seoDesc?.value || "";
+      const effectiveTitle = rawTitle || (rawDesc ? (p.title?.length <= 50 ? p.title : fitComplete(p.title, 50)) : "");
+      return {
+        ...p,
+        seo: {
+          title: effectiveTitle,
+          description: rawDesc,
+        },
+      };
+    });
 
     // 2. Retrieve catalog audit metrics
     const currentShop = shopName || shop.myshopifyDomain || "default-store";
@@ -573,20 +595,19 @@ export default function Dashboard() {
           >
             <div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
-                <div
+                <img
+                  src="/app-logo.jpg"
+                  alt="SEO Assistant Logo"
                   style={{
-                    width: "44px",
-                    height: "44px",
+                    width: "48px",
+                    height: "48px",
                     borderRadius: "12px",
-                    background: "#eff6ff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    objectFit: "cover",
+                    boxShadow: "0 2px 10px rgba(16, 185, 129, 0.25)",
+                    border: "1px solid #e2e8f0",
                     flexShrink: 0,
                   }}
-                >
-                  <IconStore size={22} color="#2563eb" />
-                </div>
+                />
                 <div>
                   <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
                     Welcome back,
